@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
 import https from "https";
-import http from "http";
 import fs from "fs";
 import cors from "cors";
 import helmet from "helmet";
@@ -90,14 +89,6 @@ const startServer = async () => {
         `);
       });
 
-      // Optional: redirect HTTP to HTTPS
-      const HTTP_PORT = process.env.HTTP_PORT || 80;
-      http.createServer((req, res) => {
-        res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
-        res.end();
-      }).listen(HTTP_PORT, () => {
-        console.log(`🔀 HTTP redirect server running on port ${HTTP_PORT}`);
-      });
     } else {
       // HTTP server (development)
       app.listen(PORT, () => {
