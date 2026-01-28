@@ -6,9 +6,9 @@ import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 
 import { testConnection } from "./config/database.js";
-// import { syncDatabase } from "./models/index.js";
-// import routes from "./routes/index.js";
-// import { errorHandler, notFound } from "./middleware/errorHandler.js";
+import { syncDatabase } from "./models/index.js";
+import routes from "./routes/index.js";
+import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 dotenv.config();
 
@@ -36,8 +36,7 @@ if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
-// Routes
-// app.use("/api", routes);
+app.use("/api", routes);
 
 // Root endpoint
 app.get("/", (req, res) => {
@@ -53,9 +52,9 @@ app.get("/", (req, res) => {
   });
 });
 
-// // Error handling
-// app.use(notFound);
-// app.use(errorHandler);
+// Error handling
+app.use(notFound);
+app.use(errorHandler);
 
 // Initialize server
 const startServer = async () => {
@@ -63,8 +62,8 @@ const startServer = async () => {
     // Test database connection
     await testConnection();
 
-    // // Sync database (don't use { force: true } in production!)
-    // await syncDatabase();
+    // Sync database (don't use { force: true } in production!)
+    await syncDatabase();
 
     // Start server
     app.listen(PORT, () => {
