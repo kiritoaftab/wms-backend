@@ -1,5 +1,8 @@
 import dotenv from "dotenv";
 import express from "express";
+import https from "https";
+import http from "http";
+import fs from "fs";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -65,9 +68,40 @@ const startServer = async () => {
     // Sync database (don't use { force: true } in production!)
     await syncDatabase();
 
-    // Start server
-    app.listen(PORT, () => {
-      console.log(`
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (isProduction && process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) {
+      const sslOptions = {
+        key: fs.readFileSync(process.env.SSL_KEY_PATH),
+        cert: fs.readFileSync(process.env.SSL_CERT_PATH),
+      };
+
+      // HTTPS server
+      https.createServer(sslOptions, app).listen(PORT, () => {
+        console.log(`
+╔════════════════════════════════════════╗
+║   🚀 WMS Backend Server Running       ║
+║                                        ║
+║   Environment: ${process.env.NODE_ENV?.padEnd(23)}║
+║   Port: ${PORT.toString().padEnd(31)}║
+║   URL: https://localhost:${PORT.toString().padEnd(14)}║
+║   SSL: Enabled                         ║
+╚════════════════════════════════════════╝
+        `);
+      });
+
+      // Optional: redirect HTTP to HTTPS
+      const HTTP_PORT = process.env.HTTP_PORT || 80;
+      http.createServer((req, res) => {
+        res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
+        res.end();
+      }).listen(HTTP_PORT, () => {
+        console.log(`🔀 HTTP redirect server running on port ${HTTP_PORT}`);
+      });
+    } else {
+      // HTTP server (development)
+      app.listen(PORT, () => {
+        console.log(`
 ╔════════════════════════════════════════╗
 ║   🚀 WMS Backend Server Running       ║
 ║                                        ║
@@ -75,8 +109,9 @@ const startServer = async () => {
 ║   Port: ${PORT.toString().padEnd(31)}║
 ║   URL: http://localhost:${PORT.toString().padEnd(15)}║
 ╚════════════════════════════════════════╝
-      `);
-    });
+        `);
+      });
+    }
   } catch (error) {
     console.error("❌ Failed to start server:", error);
     process.exit(1);
