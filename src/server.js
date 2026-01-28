@@ -68,6 +68,7 @@ const startServer = async () => {
     await syncDatabase();
 
     const isProduction = process.env.NODE_ENV === "production";
+    const domain = process.env.DOMAIN || "localhost";
 
     if (isProduction && process.env.SSL_KEY_PATH && process.env.SSL_CERT_PATH) {
       const sslOptions = {
@@ -83,12 +84,11 @@ const startServer = async () => {
 ║                                        ║
 ║   Environment: ${process.env.NODE_ENV?.padEnd(23)}║
 ║   Port: ${PORT.toString().padEnd(31)}║
-║   URL: https://localhost:${PORT.toString().padEnd(14)}║
+║   URL: https://${domain}:${PORT.toString().padEnd(14)}║
 ║   SSL: Enabled                         ║
 ╚════════════════════════════════════════╝
         `);
       });
-
     } else {
       // HTTP server (development)
       app.listen(PORT, () => {
