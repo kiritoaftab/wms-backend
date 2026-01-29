@@ -4,6 +4,7 @@ import userRoutes from "./userRoutes.js";
 import roleRoutes from "./roleRoutes.js";
 import moduleRoutes from "./moduleRoutes.js";
 import permissionRoutes from "./permissionRoutes.js";
+import userRoleRoutes from "./userRoleRoutes.js";
 
 const router = express.Router();
 
@@ -13,6 +14,7 @@ router.use("/users", userRoutes);
 router.use("/roles", roleRoutes);
 router.use("/modules", moduleRoutes);
 router.use("/permissions", permissionRoutes);
+router.use("/user-roles", userRoleRoutes);
 
 // Health check
 router.get("/health", (req, res) => {

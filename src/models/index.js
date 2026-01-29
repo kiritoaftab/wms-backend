@@ -71,6 +71,16 @@ Role.belongsTo(User, {
   as: "creator",
 });
 
+UserRole.belongsTo(User, {
+  foreignKey: "user_id",
+  as: "user",
+});
+
+UserRole.belongsTo(Role, {
+  foreignKey: "role_id",
+  as: "role",
+});
+
 // Sync function
 const syncDatabase = async (options = {}) => {
   try {
