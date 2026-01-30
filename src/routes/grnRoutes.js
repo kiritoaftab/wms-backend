@@ -2,8 +2,7 @@ import express from "express";
 import {
   getAllGRNs,
   getGRNById,
-  createGRNFromASN,
-  postGRN,
+  postGRNFromASN,
   assignPutawayTask,
   completePutawayTask,
 } from "../controllers/grnController.js";
@@ -20,11 +19,8 @@ router.get("/", authorize("GRN", "READ"), getAllGRNs);
 // Get GRN by ID
 router.get("/:id", authorize("GRN", "READ"), getGRNById);
 
-// Create GRN from ASN
-router.post("/", authorize("GRN", "CREATE"), createGRNFromASN);
-
-// Post GRN
-router.post("/:id/post", authorize("GRN", "UPDATE"), postGRN);
+// Post GRN from ASN (single atomic operation: creates + posts GRN)
+router.post("/post-from-asn", authorize("GRN", "CREATE"), postGRNFromASN);
 
 // Assign putaway task
 router.post("/assign-putaway", authorize("GRN", "UPDATE"), assignPutawayTask);

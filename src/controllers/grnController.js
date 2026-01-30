@@ -10,6 +10,7 @@ import {
   User,
 } from "../models/index.js";
 import { sequelize } from "../config/database.js";
+import { Op } from "sequelize";
 
 // Generate GRN Number
 const generateGRNNumber = async (asnNo) => {
@@ -133,8 +134,8 @@ const getGRNById = async (req, res, next) => {
   }
 };
 
-// Create GRN from ASN (auto-generate from received pallets)
-const createGRNFromASN = async (req, res, next) => {
+// Post GRN from ASN - Single atomic operation (creates GRN + GRN Lines + posts)
+const postGRNFromASN = async (req, res, next) => {
   const t = await sequelize.transaction();
 
   try {
@@ -159,26 +160,45 @@ const createGRNFromASN = async (req, res, next) => {
           ],
         },
       ],
+      transaction: t,
+      lock: t.LOCK.UPDATE, // Lock the ASN row to prevent race conditions
     });
 
     if (!asn) {
+      await t.rollback();
       return res.status(404).json({
         success: false,
         message: "ASN not found",
       });
     }
 
+    // Only allow GRN creation from IN_RECEIVING status
     if (asn.status !== "IN_RECEIVING") {
+      await t.rollback();
       return res.status(400).json({
         success: false,
-        message: `Cannot create GRN for ASN with status ${asn.status}`,
+        message: `Cannot post GRN for ASN with status ${asn.status}. ASN must be in IN_RECEIVING status.`,
+      });
+    }
+
+    // Double-check: Ensure no GRN already exists for this ASN
+    const existingGRN = await GRN.findOne({
+      where: { asn_id: asn.id },
+      transaction: t,
+    });
+
+    if (existingGRN) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        message: `GRN already exists for this ASN: ${existingGRN.grn_no}`,
       });
     }
 
     // Generate GRN number
     const grn_no = await generateGRNNumber(asn.asn_no);
 
-    // Create GRN
+    // Create GRN with POSTED status directly
     const grn = await GRN.create(
       {
         grn_no,
@@ -186,7 +206,9 @@ const createGRNFromASN = async (req, res, next) => {
         warehouse_id: asn.warehouse_id,
         total_received_qty: asn.total_received_units,
         total_damaged_qty: asn.total_damaged_units,
-        status: "DRAFT",
+        status: "POSTED",
+        posted_at: new Date(),
+        posted_by: req.user.id,
       },
       { transaction: t },
     );
@@ -204,7 +226,7 @@ const createGRNFromASN = async (req, res, next) => {
             batch_no: palletRecord.batch_no,
             qty: palletRecord.good_qty,
             source_location:
-              palletRecord.pallet.current_location ||
+              palletRecord.pallet?.current_location ||
               asn.dock?.dock_code ||
               "RECEIVING",
             putaway_status: "PENDING",
@@ -214,6 +236,15 @@ const createGRNFromASN = async (req, res, next) => {
     }
 
     await GRNLine.bulkCreate(grnLines, { transaction: t });
+
+    // Update ASN status to GRN_POSTED
+    await asn.update(
+      {
+        status: "GRN_POSTED",
+        grn_posted_at: new Date(),
+      },
+      { transaction: t },
+    );
 
     await t.commit();
 
@@ -229,68 +260,18 @@ const createGRNFromASN = async (req, res, next) => {
             { model: Pallet, as: "pallet" },
           ],
         },
+        {
+          model: User,
+          as: "poster",
+          attributes: ["id", "username", "email"],
+        },
       ],
     });
 
     res.status(201).json({
       success: true,
-      message: "GRN created successfully",
-      data: createdGRN,
-    });
-  } catch (error) {
-    await t.rollback();
-    next(error);
-  }
-};
-
-// Post GRN (finalize)
-const postGRN = async (req, res, next) => {
-  const t = await sequelize.transaction();
-
-  try {
-    const grn = await GRN.findByPk(req.params.id, {
-      include: [{ model: ASN, as: "asn" }],
-    });
-
-    if (!grn) {
-      return res.status(404).json({
-        success: false,
-        message: "GRN not found",
-      });
-    }
-
-    if (grn.status !== "DRAFT") {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot post GRN with status ${grn.status}`,
-      });
-    }
-
-    // Update GRN status
-    await grn.update(
-      {
-        status: "POSTED",
-        posted_at: new Date(),
-        posted_by: req.user.id,
-      },
-      { transaction: t },
-    );
-
-    // Update ASN status
-    await grn.asn.update(
-      {
-        status: "GRN_POSTED",
-        grn_posted_at: new Date(),
-      },
-      { transaction: t },
-    );
-
-    await t.commit();
-
-    res.json({
-      success: true,
       message: "GRN posted successfully",
-      data: grn,
+      data: createdGRN,
     });
   } catch (error) {
     await t.rollback();
@@ -300,23 +281,51 @@ const postGRN = async (req, res, next) => {
 
 // Assign putaway task to user
 const assignPutawayTask = async (req, res, next) => {
+  const t = await sequelize.transaction();
+
   try {
     const { line_id, user_id, destination_location } = req.body;
 
-    const grnLine = await GRNLine.findByPk(line_id);
+    const grnLine = await GRNLine.findByPk(line_id, {
+      include: [
+        {
+          model: GRN,
+          as: "grn",
+          include: [{ model: ASN, as: "asn" }],
+        },
+      ],
+      transaction: t,
+    });
 
     if (!grnLine) {
+      await t.rollback();
       return res.status(404).json({
         success: false,
         message: "GRN Line not found",
       });
     }
 
-    await grnLine.update({
-      assigned_to: user_id,
-      destination_location,
-      putaway_status: "ASSIGNED",
-    });
+    await grnLine.update(
+      {
+        assigned_to: user_id,
+        destination_location,
+        putaway_status: "ASSIGNED",
+      },
+      { transaction: t },
+    );
+
+    // Auto-update ASN status to PUTAWAY_PENDING if currently GRN_POSTED
+    const asn = grnLine.grn?.asn;
+    if (asn && asn.status === "GRN_POSTED") {
+      await asn.update(
+        {
+          status: "PUTAWAY_PENDING",
+        },
+        { transaction: t },
+      );
+    }
+
+    await t.commit();
 
     res.json({
       success: true,
@@ -324,18 +333,30 @@ const assignPutawayTask = async (req, res, next) => {
       data: grnLine,
     });
   } catch (error) {
+    await t.rollback();
     next(error);
   }
 };
 
 // Complete putaway task
 const completePutawayTask = async (req, res, next) => {
+  const t = await sequelize.transaction();
+
   try {
     const grnLine = await GRNLine.findByPk(req.params.lineId, {
-      include: [{ model: Pallet, as: "pallet" }],
+      include: [
+        { model: Pallet, as: "pallet" },
+        {
+          model: GRN,
+          as: "grn",
+          include: [{ model: ASN, as: "asn" }],
+        },
+      ],
+      transaction: t,
     });
 
     if (!grnLine) {
+      await t.rollback();
       return res.status(404).json({
         success: false,
         message: "GRN Line not found",
@@ -343,16 +364,57 @@ const completePutawayTask = async (req, res, next) => {
     }
 
     // Update GRN Line
-    await grnLine.update({
-      putaway_status: "COMPLETED",
-      putaway_completed_at: new Date(),
-    });
+    await grnLine.update(
+      {
+        putaway_status: "COMPLETED",
+        putaway_completed_at: new Date(),
+      },
+      { transaction: t },
+    );
 
     // Update Pallet location
-    await grnLine.pallet.update({
-      current_location: grnLine.destination_location,
-      status: "IN_STORAGE",
-    });
+    if (grnLine.pallet) {
+      await grnLine.pallet.update(
+        {
+          current_location: grnLine.destination_location,
+          status: "IN_STORAGE",
+        },
+        { transaction: t },
+      );
+    }
+
+    // Check if ALL GRN lines for this ASN are completed
+    const asn = grnLine.grn?.asn;
+    if (asn) {
+      const pendingLines = await GRNLine.count({
+        where: {
+          putaway_status: { [Op.ne]: "COMPLETED" },
+        },
+        include: [
+          {
+            model: GRN,
+            as: "grn",
+            where: { asn_id: asn.id },
+            required: true,
+          },
+        ],
+        transaction: t,
+      });
+
+      // If no pending lines, mark ASN as CLOSED
+      if (pendingLines === 0) {
+        await asn.update(
+          {
+            status: "CLOSED",
+            closed_at: new Date(),
+            putaway_completed_at: new Date(),
+          },
+          { transaction: t },
+        );
+      }
+    }
+
+    await t.commit();
 
     res.json({
       success: true,
@@ -360,6 +422,7 @@ const completePutawayTask = async (req, res, next) => {
       data: grnLine,
     });
   } catch (error) {
+    await t.rollback();
     next(error);
   }
 };
@@ -367,8 +430,7 @@ const completePutawayTask = async (req, res, next) => {
 export {
   getAllGRNs,
   getGRNById,
-  createGRNFromASN,
-  postGRN,
+  postGRNFromASN,
   assignPutawayTask,
   completePutawayTask,
 };

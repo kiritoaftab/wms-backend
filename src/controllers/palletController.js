@@ -168,4 +168,5 @@ export {
   createPallet,
   updatePalletLocation,
   deletePallet,
+  generatePalletID,
 };
