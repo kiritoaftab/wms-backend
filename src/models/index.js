@@ -264,5 +264,11 @@ export {
   Supplier,
   Dock,
   SKU,
+  ASN,
+  ASNLine,
+  ASNLinePallet,
+  GRN,
+  GRNLine,
+  Pallet,
   syncDatabase,
 };
