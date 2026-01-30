@@ -12,13 +12,8 @@ import {
 import { sequelize } from "../config/database.js";
 import { Op } from "sequelize";
 
-const generatePTTaskID = async () => {
-  const lastTask = await GRNLine.findOne({
-    order: [["id", "DESC"]],
-  });
-
-  const nextNumber = lastTask ? lastTask.id + 1 : 1;
-  return `PT-${String(nextNumber).padStart(5, "0")}`;
+const generatePTTaskID = async (startingNumber) => {
+  return `PT-${String(startingNumber).padStart(5, "0")}`;
 };
 
 // Generate GRN Number
@@ -222,12 +217,20 @@ const postGRNFromASN = async (req, res, next) => {
       { transaction: t },
     );
 
+    const lastTask = await GRNLine.findOne({
+      order: [["id", "DESC"]],
+    });
+
+    let nextPTNumber = lastTask ? lastTask.id + 1 : 1;
+
     // Create GRN Lines from ASN Line Pallets
     const grnLines = [];
     for (const asnLine of asn.lines) {
       for (const palletRecord of asnLine.pallets) {
         if (palletRecord.good_qty > 0) {
-          const ptTaskId = await generatePTTaskID();
+          const ptTaskId = await generatePTTaskID(nextPTNumber);
+          console.log("Generated PT Task ID:", ptTaskId);
+          nextPTNumber += 1;
           grnLines.push({
             pt_task_id: ptTaskId,
             grn_id: grn.id,
