@@ -6,6 +6,16 @@ import moduleRoutes from "./moduleRoutes.js";
 import permissionRoutes from "./permissionRoutes.js";
 import userRoleRoutes from "./userRoleRoutes.js";
 
+import warehouseRoutes from "./warehouseRoutes.js";
+import clientRoutes from "./clientRoutes.js";
+import supplierRoutes from "./supplierRoutes.js";
+import dockRoutes from "./dockRoutes.js";
+import skuRoutes from "./skuRoutes.js";
+import asnRoutes from "./asnRoutes.js";
+import asnLineRoutes from "./asnLineRoutes.js";
+import palletRoutes from "./palletRoutes.js";
+import grnRoutes from "./grnRoutes.js";
+
 const router = express.Router();
 
 // API routes
@@ -15,6 +25,15 @@ router.use("/roles", roleRoutes);
 router.use("/modules", moduleRoutes);
 router.use("/permissions", permissionRoutes);
 router.use("/user-roles", userRoleRoutes);
+router.use("/warehouses", warehouseRoutes);
+router.use("/clients", clientRoutes);
+router.use("/suppliers", supplierRoutes);
+router.use("/docks", dockRoutes);
+router.use("/skus", skuRoutes);
+router.use("/asns", asnRoutes);
+router.use("/asn-lines", asnLineRoutes);
+router.use("/pallets", palletRoutes);
+router.use("/grns", grnRoutes);
 
 // Health check
 router.get("/health", (req, res) => {
