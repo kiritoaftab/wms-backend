@@ -13,15 +13,15 @@ const router = express.Router();
 router.use(authenticate);
 
 // Get lines by ASN ID
-router.get("/asn/:asnId", authorize("ASN", "READ"), getLinesByASN);
+router.get("/asn/:asnId", authorize("INBOUND", "READ"), getLinesByASN);
 
 // Add line to ASN
-router.post("/", authorize("ASN", "CREATE"), addLineToASN);
+router.post("/", authorize("INBOUND", "CREATE"), addLineToASN);
 
 // Update ASN line
-router.put("/:id", authorize("ASN", "UPDATE"), updateASNLine);
+router.put("/:id", authorize("INBOUND", "UPDATE"), updateASNLine);
 
 // Delete ASN line
-router.delete("/:id", authorize("ASN", "DELETE"), deleteASNLine);
+router.delete("/:id", authorize("INBOUND", "DELETE"), deleteASNLine);
 
 export default router;
