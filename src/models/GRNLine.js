@@ -9,6 +9,12 @@ const GRNLine = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+    pt_task_id: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      unique: true,
+      comment: "Putaway Task ID: PT-10923, PT-10924",
+    },
     grn_id: {
       type: DataTypes.INTEGER,
       allowNull: false,

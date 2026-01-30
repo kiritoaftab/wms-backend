@@ -12,6 +12,15 @@ import {
 import { sequelize } from "../config/database.js";
 import { Op } from "sequelize";
 
+const generatePTTaskID = async () => {
+  const lastTask = await GRNLine.findOne({
+    order: [["id", "DESC"]],
+  });
+
+  const nextNumber = lastTask ? lastTask.id + 1 : 1;
+  return `PT-${String(nextNumber).padStart(5, "0")}`;
+};
+
 // Generate GRN Number
 const generateGRNNumber = async (asnNo) => {
   const lastGRN = await GRN.findOne({
@@ -218,7 +227,9 @@ const postGRNFromASN = async (req, res, next) => {
     for (const asnLine of asn.lines) {
       for (const palletRecord of asnLine.pallets) {
         if (palletRecord.good_qty > 0) {
+          const ptTaskId = await generatePTTaskID();
           grnLines.push({
+            pt_task_id: ptTaskId,
             grn_id: grn.id,
             asn_line_id: asnLine.id,
             sku_id: asnLine.sku_id,
