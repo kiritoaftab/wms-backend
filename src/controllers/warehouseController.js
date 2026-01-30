@@ -13,7 +13,7 @@ const getAllWarehouses = async (req, res, next) => {
             "dock_name",
             "dock_code",
             "dock_type",
-            "capacity_sqft",
+            // "capacity_sqft",
             "is_active",
           ],
         },

@@ -17,27 +17,30 @@ const router = express.Router();
 router.use(authenticate);
 
 // Get ASN statistics
-router.get("/stats", authorize("ASN", "READ"), getASNStats);
+router.get("/stats", authorize("INBOUND", "READ"), getASNStats);
 
 // Get all ASNs
-router.get("/", authorize("ASN", "READ"), getAllASNs);
+router.get("/", authorize("INBOUND", "READ"), getAllASNs);
 
 // Get ASN by ID
-router.get("/:id", authorize("ASN", "READ"), getASNById);
+router.get("/:id", authorize("INBOUND", "READ"), getASNById);
 
 // Create ASN
-router.post("/", authorize("ASN", "CREATE"), createASN);
+router.post("/", authorize("INBOUND", "CREATE"), createASN);
 
 // Update ASN
-router.put("/:id", authorize("ASN", "UPDATE"), updateASN);
+router.put("/:id", authorize("INBOUND", "UPDATE"), updateASN);
 
 // Confirm ASN
-router.post("/:id/confirm", authorize("ASN", "UPDATE"), confirmASN);
+router.post("/:id/confirm", authorize("INBOUND", "UPDATE"), confirmASN);
 
 // Start receiving
-router.post("/:id/start-receiving", authorize("ASN", "UPDATE"), startReceiving);
-
+router.post(
+  "/:id/start-receiving",
+  authorize("INBOUND", "UPDATE"),
+  startReceiving,
+);
 // Cancel ASN
-router.delete("/:id", authorize("ASN", "DELETE"), cancelASN);
+router.delete("/:id", authorize("INBOUND", "DELETE"), cancelASN);
 
 export default router;
