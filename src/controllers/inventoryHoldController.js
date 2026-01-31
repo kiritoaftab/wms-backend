@@ -99,9 +99,18 @@ export const createHold = async (req, res, next) => {
         {
           model: Inventory,
           include: [
-            { model: SKU, attributes: ["id", "sku_code", "sku_name"] },
-            { model: Location, attributes: ["id", "location_code", "zone"] },
+            {
+              model: SKU,
+              attributes: ["id", "sku_code", "sku_name"],
+              as: "sku",
+            },
+            {
+              model: Location,
+              attributes: ["id", "location_code", "zone"],
+              as: "location",
+            },
           ],
+          as: "inventory",
         },
       ],
     });
@@ -112,6 +121,7 @@ export const createHold = async (req, res, next) => {
       data: createdHold,
     });
   } catch (error) {
+    console.log(error);
     await t.rollback();
     next(error);
   }
@@ -127,7 +137,7 @@ export const releaseHold = async (req, res, next) => {
 
     // Get hold record
     const hold = await InventoryHold.findByPk(id, {
-      include: [{ model: Inventory }],
+      include: [{ model: Inventory, as: "inventory" }],
       transaction: t,
     });
 
@@ -159,7 +169,7 @@ export const releaseHold = async (req, res, next) => {
     );
 
     // Update inventory quantities
-    const inventory = hold.Inventory;
+    const inventory = hold.inventory;
     const newHoldQty = parseFloat(inventory.hold_qty) - parseFloat(hold.qty);
     const newAvailableQty =
       parseFloat(inventory.available_qty) + parseFloat(hold.qty);
@@ -221,16 +231,20 @@ export const getAllHolds = async (req, res, next) => {
             {
               model: SKU,
               attributes: ["id", "sku_code", "sku_name", "category"],
+              as: "sku",
             },
             {
               model: Location,
               attributes: ["id", "location_code", "zone"],
+              as: "location",
             },
             {
               model: Warehouse,
               attributes: ["id", "warehouse_name", "warehouse_code"],
+              as: "warehouse",
             },
           ],
+          as: "inventory",
         },
       ],
       limit: parseInt(limit),
@@ -266,6 +280,7 @@ export const getHoldById = async (req, res, next) => {
             {
               model: SKU,
               attributes: ["id", "sku_code", "sku_name", "category", "uom"],
+              as: "sku",
             },
             {
               model: Location,
@@ -277,12 +292,15 @@ export const getHoldById = async (req, res, next) => {
                 "rack",
                 "level",
               ],
+              as: "location",
             },
             {
               model: Warehouse,
               attributes: ["id", "warehouse_name", "warehouse_code"],
+              as: "warehouse",
             },
           ],
+          as: "inventory",
         },
       ],
     });
@@ -319,6 +337,7 @@ export const getHoldStats = async (req, res, next) => {
           model: Inventory,
           where: inventoryWhere,
           attributes: [],
+          as: "inventory",
         },
       ],
     });
@@ -328,14 +347,18 @@ export const getHoldStats = async (req, res, next) => {
       where: { status: "ACTIVE" },
       attributes: [
         "hold_reason",
-        [sequelize.fn("COUNT", sequelize.col("InventoryHold.id")), "count"],
-        [sequelize.fn("SUM", sequelize.col("InventoryHold.qty")), "total_qty"],
+        [sequelize.fn("COUNT", sequelize.col("inventory_holds.id")), "count"],
+        [
+          sequelize.fn("SUM", sequelize.col("inventory_holds.qty")),
+          "total_qty",
+        ],
       ],
       include: [
         {
           model: Inventory,
           where: inventoryWhere,
           attributes: [],
+          as: "inventory",
         },
       ],
       group: ["hold_reason"],
@@ -350,6 +373,7 @@ export const getHoldStats = async (req, res, next) => {
           model: Inventory,
           where: inventoryWhere,
           attributes: [],
+          as: "inventory",
         },
       ],
     });
@@ -368,6 +392,7 @@ export const getHoldStats = async (req, res, next) => {
           model: Inventory,
           where: inventoryWhere,
           attributes: [],
+          as: "inventory",
         },
       ],
     });
