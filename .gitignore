@@ -21,3 +21,6 @@ Thumbs.db
 # Build files
 dist/
 build/
+
+# docs for llms
+docs/

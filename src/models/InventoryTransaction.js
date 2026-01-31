@@ -87,7 +87,7 @@ const InventoryTransaction = sequelize.define(
       comment: "GRN, PICK_ORDER, ADJUSTMENT, etc",
     },
     reference_id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING(50),
       allowNull: true,
       comment: "ID of the reference record",
     },

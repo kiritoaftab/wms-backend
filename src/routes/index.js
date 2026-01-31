@@ -17,6 +17,8 @@ import palletRoutes from "./palletRoutes.js";
 import grnRoutes from "./grnRoutes.js";
 import grnLineRoutes from "./grnLineRoutes.js";
 import locationRoutes from "./locationRoutes.js";
+import inventoryRoutes from "./inventoryRoutes.js";
+import inventoryHoldRoutes from "./inventoryHoldRoutes.js";
 
 const router = express.Router();
 
@@ -38,6 +40,8 @@ router.use("/pallets", palletRoutes);
 router.use("/grns", grnRoutes);
 router.use("/grn-lines", grnLineRoutes);
 router.use("/locations", locationRoutes);
+router.use("/inventory", inventoryRoutes);
+router.use("/inventory-holds", inventoryHoldRoutes);
 
 // Health check
 router.get("/health", (req, res) => {

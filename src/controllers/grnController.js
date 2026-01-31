@@ -10,6 +10,9 @@ import {
   SKU,
   User,
   Dock,
+  InventoryTransaction,
+  Inventory,
+  Client,
 } from "../models/index.js";
 import { sequelize } from "../config/database.js";
 import { Op } from "sequelize";
@@ -389,10 +392,21 @@ const completePutawayTask = async (req, res, next) => {
     const grnLine = await GRNLine.findByPk(req.params.lineId, {
       include: [
         { model: Pallet, as: "pallet" },
+        { model: SKU, as: "sku" },
+        { model: Location, as: "destination_location" },
         {
           model: GRN,
           as: "grn",
-          include: [{ model: ASN, as: "asn" }],
+          include: [
+            {
+              model: ASN,
+              as: "asn",
+              include: [
+                { model: Client, as: "client" },
+                { model: Warehouse, as: "warehouse" },
+              ],
+            },
+          ],
         },
       ],
       transaction: t,
@@ -403,6 +417,14 @@ const completePutawayTask = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "GRN Line not found",
+      });
+    }
+
+    if (grnLine.putaway_status === "COMPLETED") {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Putaway task already completed",
       });
     }
 
@@ -419,15 +441,83 @@ const completePutawayTask = async (req, res, next) => {
     if (grnLine.pallet) {
       await grnLine.pallet.update(
         {
-          current_location: grnLine.destination_location,
+          current_location_id: grnLine.destination_location_id,
           status: "IN_STORAGE",
         },
         { transaction: t },
       );
     }
 
-    // Check if ALL GRN lines for this ASN are completed
+    // Update or Create Inventory
     const asn = grnLine.grn?.asn;
+    const [inventory] = await Inventory.findOrCreate({
+      where: {
+        warehouse_id: asn.warehouse_id,
+        sku_id: grnLine.sku_id,
+        location_id: grnLine.destination_location_id,
+        batch_no: grnLine.batch_no || null,
+      },
+      defaults: {
+        client_id: asn.client_id,
+        serial_no: null,
+        expiry_date: null,
+        on_hand_qty: grnLine.qty,
+        available_qty: grnLine.qty,
+        hold_qty: 0,
+        allocated_qty: 0,
+        damaged_qty: 0,
+        status: "HEALTHY",
+      },
+      transaction: t,
+    });
+
+    // If inventory exists, increment quantities
+    if (!inventory._options.isNewRecord) {
+      await inventory.update(
+        {
+          on_hand_qty:
+            parseFloat(inventory.on_hand_qty) + parseFloat(grnLine.qty),
+          available_qty:
+            parseFloat(inventory.available_qty) + parseFloat(grnLine.qty),
+        },
+        { transaction: t },
+      );
+    }
+
+    // Update location current usage
+    const location = grnLine.destinationLocation;
+    if (location) {
+      await location.update(
+        {
+          current_usage:
+            parseFloat(location.current_usage) + parseFloat(grnLine.qty),
+        },
+        { transaction: t },
+      );
+    }
+
+    // Create inventory transaction record
+    const transaction_id = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0")}`;
+    await InventoryTransaction.create(
+      {
+        transaction_id,
+        warehouse_id: asn.warehouse_id,
+        sku_id: grnLine.sku_id,
+        transaction_type: "PUTAWAY",
+        to_location_id: grnLine.destination_location_id,
+        qty: parseFloat(grnLine.qty),
+        batch_no: grnLine.batch_no || null,
+        reference_type: "GRN_LINE",
+        reference_id: grnLine.pt_task_id,
+        notes: `Putaway completed for ${grnLine.pt_task_id}`,
+        performed_by: req.user.id,
+      },
+      { transaction: t },
+    );
+
+    // Check if ALL GRN lines for this ASN are completed
     if (asn) {
       const pendingLines = await GRNLine.count({
         where: {
@@ -462,7 +552,13 @@ const completePutawayTask = async (req, res, next) => {
     res.json({
       success: true,
       message: "Putaway task completed successfully",
-      data: grnLine,
+      data: {
+        grnLine,
+        inventory: {
+          on_hand_qty: inventory.on_hand_qty,
+          available_qty: inventory.available_qty,
+        },
+      },
     });
   } catch (error) {
     await t.rollback();
