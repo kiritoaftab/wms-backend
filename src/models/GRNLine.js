@@ -63,15 +63,23 @@ const GRNLine = sequelize.define(
     },
 
     // Locations
-    source_location: {
-      type: DataTypes.STRING(50),
+    source_location_id: {
+      type: DataTypes.INTEGER,
       allowNull: false,
-      comment: "Current location: DOCK-01",
+      references: {
+        model: "locations",
+        key: "id",
+      },
+      comment: "Current location (dock/receiving area)",
     },
-    destination_location: {
-      type: DataTypes.STRING(50),
+    destination_location_id: {
+      type: DataTypes.INTEGER,
       allowNull: true,
-      comment: "Target location: BIN-A-01-02",
+      references: {
+        model: "locations",
+        key: "id",
+      },
+      comment: "Target storage location",
     },
 
     // Putaway status

@@ -15,6 +15,8 @@ import asnRoutes from "./asnRoutes.js";
 import asnLineRoutes from "./asnLineRoutes.js";
 import palletRoutes from "./palletRoutes.js";
 import grnRoutes from "./grnRoutes.js";
+import grnLineRoutes from "./grnLineRoutes.js";
+import locationRoutes from "./locationRoutes.js";
 
 const router = express.Router();
 
@@ -34,6 +36,8 @@ router.use("/asns", asnRoutes);
 router.use("/asn-lines", asnLineRoutes);
 router.use("/pallets", palletRoutes);
 router.use("/grns", grnRoutes);
+router.use("/grn-lines", grnLineRoutes);
+router.use("/locations", locationRoutes);
 
 // Health check
 router.get("/health", (req, res) => {

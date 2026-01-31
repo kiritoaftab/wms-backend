@@ -16,6 +16,10 @@ import ASNLine from "./ASNLine.js";
 import ASNLinePallet from "./ASNLinePallet.js";
 import GRN from "./GRN.js";
 import GRNLine from "./GRNLine.js";
+import Location from "./Location.js";
+import Inventory from "./Inventory.js";
+import InventoryHold from "./InventoryHold.js";
+import InventoryTransaction from "./InventoryTransaction.js";
 
 // Define Associations
 
@@ -240,6 +244,105 @@ GRNLine.belongsTo(User, {
   as: "assignee",
 });
 
+GRNLine.belongsTo(Location, {
+  foreignKey: "source_location_id",
+  as: "source_location",
+});
+
+GRNLine.belongsTo(Location, {
+  foreignKey: "destination_location_id",
+  as: "destination_location",
+});
+
+Pallet.belongsTo(Location, {
+  foreignKey: "current_location_id",
+  as: "current_location",
+});
+
+Location.hasMany(Pallet, {
+  foreignKey: "current_location_id",
+  as: "pallets",
+});
+
+// Location belongs to Warehouse
+Location.belongsTo(Warehouse, {
+  foreignKey: "warehouse_id",
+  as: "warehouse",
+});
+
+Warehouse.hasMany(Location, {
+  foreignKey: "warehouse_id",
+  as: "locations",
+});
+
+// Inventory Associations
+Inventory.belongsTo(Warehouse, {
+  foreignKey: "warehouse_id",
+  as: "warehouse",
+});
+
+Inventory.belongsTo(Client, {
+  foreignKey: "client_id",
+  as: "client",
+});
+
+Inventory.belongsTo(SKU, {
+  foreignKey: "sku_id",
+  as: "sku",
+});
+
+Inventory.belongsTo(Location, {
+  foreignKey: "location_id",
+  as: "location",
+});
+
+// Inventory has many Holds
+Inventory.hasMany(InventoryHold, {
+  foreignKey: "inventory_id",
+  as: "holds",
+});
+
+InventoryHold.belongsTo(Inventory, {
+  foreignKey: "inventory_id",
+  as: "inventory",
+});
+
+InventoryHold.belongsTo(User, {
+  foreignKey: "created_by",
+  as: "creator",
+});
+
+InventoryHold.belongsTo(User, {
+  foreignKey: "released_by",
+  as: "releaser",
+});
+
+// Inventory Transaction Associations
+InventoryTransaction.belongsTo(Warehouse, {
+  foreignKey: "warehouse_id",
+  as: "warehouse",
+});
+
+InventoryTransaction.belongsTo(SKU, {
+  foreignKey: "sku_id",
+  as: "sku",
+});
+
+InventoryTransaction.belongsTo(Location, {
+  foreignKey: "from_location_id",
+  as: "from_location",
+});
+
+InventoryTransaction.belongsTo(Location, {
+  foreignKey: "to_location_id",
+  as: "to_location",
+});
+
+InventoryTransaction.belongsTo(User, {
+  foreignKey: "performed_by",
+  as: "performer",
+});
+
 // Sync function
 const syncDatabase = async (options = {}) => {
   try {
@@ -270,5 +373,9 @@ export {
   GRN,
   GRNLine,
   Pallet,
+  Location,
+  Inventory,
+  InventoryHold,
+  InventoryTransaction,
   syncDatabase,
 };

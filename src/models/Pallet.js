@@ -27,10 +27,14 @@ const Pallet = sequelize.define(
         key: "id",
       },
     },
-    current_location: {
-      type: DataTypes.STRING(50),
+    current_location_id: {
+      type: DataTypes.INTEGER,
       allowNull: true,
-      comment: "Current location: DOCK-01, BIN-A-01-02, etc",
+      references: {
+        model: "locations",
+        key: "id",
+      },
+      comment: "Current location of pallet",
     },
     status: {
       type: DataTypes.ENUM(

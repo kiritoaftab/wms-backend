@@ -6,11 +6,14 @@ import {
   ASNLinePallet,
   Warehouse,
   Pallet,
+  Location,
   SKU,
   User,
+  Dock,
 } from "../models/index.js";
 import { sequelize } from "../config/database.js";
 import { Op } from "sequelize";
+import { getReceivingLocation } from "../utils/locationHelper.js";
 
 const generatePTTaskID = async (startingNumber) => {
   return `PT-${String(startingNumber).padStart(5, "0")}`;
@@ -105,13 +108,15 @@ const getGRNById = async (req, res, next) => {
             {
               model: Pallet,
               as: "pallet",
-              attributes: ["id", "pallet_id", "current_location"],
+              attributes: ["id", "pallet_id", "status"],
             },
             {
               model: User,
               as: "assignee",
               attributes: ["id", "username"],
             },
+            { model: Location, as: "source_location" },
+            { model: Location, as: "destination_location" },
           ],
         },
         {
@@ -145,7 +150,7 @@ const postGRNFromASN = async (req, res, next) => {
   try {
     const { asn_id } = req.body;
 
-    // Get ASN with lines and pallets
+    // Get ASN with lines, pallets, and dock
     const asn = await ASN.findByPk(asn_id, {
       include: [
         {
@@ -155,7 +160,18 @@ const postGRNFromASN = async (req, res, next) => {
             {
               model: ASNLinePallet,
               as: "pallets",
-              include: [{ model: Pallet, as: "pallet" }],
+              include: [
+                {
+                  model: Pallet,
+                  as: "pallet",
+                  include: [
+                    {
+                      model: Location,
+                      as: "current_location",
+                    },
+                  ],
+                },
+              ],
             },
             {
               model: SKU,
@@ -163,9 +179,13 @@ const postGRNFromASN = async (req, res, next) => {
             },
           ],
         },
+        {
+          model: Dock,
+          as: "dock",
+        },
       ],
       transaction: t,
-      lock: t.LOCK.UPDATE, // Lock the ASN row to prevent race conditions
+      lock: t.LOCK.UPDATE,
     });
 
     if (!asn) {
@@ -176,7 +196,6 @@ const postGRNFromASN = async (req, res, next) => {
       });
     }
 
-    // Only allow GRN creation from IN_RECEIVING status
     if (asn.status !== "IN_RECEIVING") {
       await t.rollback();
       return res.status(400).json({
@@ -185,7 +204,6 @@ const postGRNFromASN = async (req, res, next) => {
       });
     }
 
-    // Double-check: Ensure no GRN already exists for this ASN
     const existingGRN = await GRN.findOne({
       where: { asn_id: asn.id },
       transaction: t,
@@ -199,10 +217,14 @@ const postGRNFromASN = async (req, res, next) => {
       });
     }
 
-    // Generate GRN number
+    //  Get or create a new receiving location
+    const receivingLocation = await getReceivingLocation(
+      asn.warehouse_id,
+      asn.dock?.dock_code,
+    );
+
     const grn_no = await generateGRNNumber(asn.asn_no);
 
-    // Create GRN with POSTED status directly
     const grn = await GRN.create(
       {
         grn_no,
@@ -223,14 +245,15 @@ const postGRNFromASN = async (req, res, next) => {
 
     let nextPTNumber = lastTask ? lastTask.id + 1 : 1;
 
-    // Create GRN Lines from ASN Line Pallets
     const grnLines = [];
     for (const asnLine of asn.lines) {
       for (const palletRecord of asnLine.pallets) {
         if (palletRecord.good_qty > 0) {
           const ptTaskId = await generatePTTaskID(nextPTNumber);
-          console.log("Generated PT Task ID:", ptTaskId);
           nextPTNumber += 1;
+          const sourceLocationId =
+            palletRecord.pallet?.current_location_id || receivingLocation.id;
+
           grnLines.push({
             pt_task_id: ptTaskId,
             grn_id: grn.id,
@@ -239,10 +262,8 @@ const postGRNFromASN = async (req, res, next) => {
             pallet_id: palletRecord.pallet_id,
             batch_no: palletRecord.batch_no,
             qty: palletRecord.good_qty,
-            source_location:
-              palletRecord.pallet?.current_location ||
-              asn.dock?.dock_code ||
-              "RECEIVING",
+            source_location_id: sourceLocationId,
+            destination_location_id: null,
             putaway_status: "PENDING",
           });
         }
@@ -251,7 +272,6 @@ const postGRNFromASN = async (req, res, next) => {
 
     await GRNLine.bulkCreate(grnLines, { transaction: t });
 
-    // Update ASN status to GRN_POSTED
     await asn.update(
       {
         status: "GRN_POSTED",
@@ -262,7 +282,7 @@ const postGRNFromASN = async (req, res, next) => {
 
     await t.commit();
 
-    // Fetch created GRN with details
+    // Fetch created GRN with details including locations
     const createdGRN = await GRN.findByPk(grn.id, {
       include: [
         { model: ASN, as: "asn" },
@@ -272,6 +292,16 @@ const postGRNFromASN = async (req, res, next) => {
           include: [
             { model: SKU, as: "sku" },
             { model: Pallet, as: "pallet" },
+            {
+              model: Location,
+              as: "source_location",
+              attributes: ["id", "location_code", "zone", "location_type"],
+            },
+            {
+              model: Location,
+              as: "destination_location",
+              attributes: ["id", "location_code", "zone", "location_type"],
+            },
           ],
         },
         {
@@ -292,7 +322,6 @@ const postGRNFromASN = async (req, res, next) => {
     next(error);
   }
 };
-
 // Assign putaway task to user
 const assignPutawayTask = async (req, res, next) => {
   const t = await sequelize.transaction();

@@ -9,6 +9,7 @@ import {
 } from "../models/index.js";
 import { sequelize } from "../config/database.js";
 import { generatePalletID } from "./palletController.js";
+import { getReceivingLocation } from "../utils/locationHelper.js";
 
 // Add line to ASN
 const addLineToASN = async (req, res, next) => {
@@ -167,6 +168,11 @@ const receiveLineItems = async (req, res, next) => {
         });
       }
     } else {
+      const receivingLocation = await getReceivingLocation(
+        asnLine.asn.warehouse_id,
+        asnLine.asn.dock?.dock_code,
+      );
+
       // Generate new pallet
       const newPalletId = await generatePalletID();
       pallet = await Pallet.create(
@@ -174,7 +180,7 @@ const receiveLineItems = async (req, res, next) => {
           pallet_id: newPalletId,
           warehouse_id: asnLine.asn.warehouse_id,
           pallet_type: pallet_type || "STANDARD",
-          current_location: asnLine.asn.dock?.dock_code || "RECEIVING",
+          current_location_id: receivingLocation.id, // ✅ Use location FK
           status: "IN_RECEIVING",
         },
         { transaction: t },
