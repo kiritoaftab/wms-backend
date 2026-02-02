@@ -81,6 +81,33 @@ const seedDatabase = async () => {
         display_order: 8,
         icon: "local_shipping",
       },
+      {
+        name: "Inbounds",
+        code: "INBOUND",
+        description: "All activities concerning Inbounds",
+        display_order: 10,
+        icon: "putaway",
+      },
+      {
+        name: "Pallets",
+        code: "PALLET",
+        description: "All activities concerning Pallets",
+        display_order: 10,
+      },
+      {
+        name: "GRN",
+        code: "GRN",
+        description: "All activities concerning GRNs",
+        display_order: 10,
+        icon: "pallet",
+      },
+      {
+        name: "Putaway",
+        code: "PUTAWAY",
+        description: "All activities concerning Putaway",
+        display_order: 11,
+        icon: "putaway",
+      },
     ]);
     console.log(`✅ Created ${modules.length} modules`);
 
