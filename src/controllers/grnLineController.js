@@ -281,9 +281,9 @@ const getAllGRNLines = async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    const { warehouse_id } = req.query;
+    // const { warehouse_id } = req.query;
     const grnLines = await GRNLine.findAll({
-      where: warehouse_id ? { warehouse_id } : {},
+      // where: warehouse_id ? { warehouse_id } : {},
       include: [
         { model: SKU, as: "sku" },
         { model: Pallet, as: "pallet" },
