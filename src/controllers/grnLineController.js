@@ -275,9 +275,40 @@ const bulkUpdateGRNLines = async (req, res, next) => {
   }
 };
 
+const getAllGRNLines = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    const { warehouse_id } = req.query;
+    const grnLines = await GRNLine.findAll({
+      where: warehouse_id ? { warehouse_id } : {},
+      include: [
+        { model: SKU, as: "sku" },
+        { model: Pallet, as: "pallet" },
+        { model: Location, as: "source_location" },
+        { model: Location, as: "destination_location" },
+        { model: User, as: "assignee" },
+      ],
+      limit,
+      offset,
+      order: [["created_at", "DESC"]],
+    });
+
+    res.json({
+      success: true,
+      data: grnLines,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   getGRNLineById,
   updateGRNLine,
   getSuggestedLocation,
   bulkUpdateGRNLines,
+  getAllGRNLines,
 };

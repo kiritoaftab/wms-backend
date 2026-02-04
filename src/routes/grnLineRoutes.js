@@ -4,6 +4,7 @@ import {
   updateGRNLine,
   getSuggestedLocation,
   bulkUpdateGRNLines,
+  getAllGRNLines,
 } from "../controllers/grnLineController.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 
@@ -11,6 +12,8 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+router.get("/", authorize("WAREHOUSE", "READ"), getAllGRNLines);
 
 // Get GRN Line by ID
 router.get("/:id", authorize("WAREHOUSE", "READ"), getGRNLineById);
