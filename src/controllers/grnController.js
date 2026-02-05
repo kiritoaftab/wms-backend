@@ -354,7 +354,7 @@ const assignPutawayTask = async (req, res, next) => {
     await grnLine.update(
       {
         assigned_to: user_id,
-        destination_location,
+        destination_location_id: destination_location,
         putaway_status: "ASSIGNED",
       },
       { transaction: t },
