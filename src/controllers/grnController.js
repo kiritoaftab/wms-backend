@@ -411,6 +411,7 @@ const completePutawayTask = async (req, res, next) => {
       ],
       transaction: t,
     });
+    console.log(grnLine, "GRN LINE");
 
     if (!grnLine) {
       await t.rollback();
@@ -441,7 +442,8 @@ const completePutawayTask = async (req, res, next) => {
     if (grnLine.pallet) {
       await grnLine.pallet.update(
         {
-          current_location_id: grnLine.destination_location_id,
+          current_location_id:
+            grnLine.destination_location_id || grnLine.destination_location?.id,
           status: "IN_STORAGE",
         },
         { transaction: t },
@@ -454,7 +456,8 @@ const completePutawayTask = async (req, res, next) => {
       where: {
         warehouse_id: asn.warehouse_id,
         sku_id: grnLine.sku_id,
-        location_id: grnLine.destination_location_id,
+        location_id:
+          grnLine.destination_location_id || grnLine.destination_location?.id,
         batch_no: grnLine.batch_no || null,
       },
       defaults: {
@@ -484,8 +487,10 @@ const completePutawayTask = async (req, res, next) => {
       );
     }
 
+    console.log(inventory, "INVENTORY");
+
     // Update location current usage
-    const location = grnLine.destinationLocation;
+    const location = grnLine.destination_location;
     if (location) {
       await location.update(
         {
