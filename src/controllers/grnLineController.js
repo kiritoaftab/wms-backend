@@ -305,10 +305,49 @@ const getAllGRNLines = async (req, res, next) => {
   }
 };
 
+const startPutawayTask = async (req, res, next) => {
+  try {
+    const { lineId } = req.params;
+
+    const grnLine = await GRNLine.findByPk(lineId);
+
+    if (!grnLine) {
+      return res.status(404).json({
+        success: false,
+        message: "GRN Line not found",
+      });
+    }
+    // Can only start if not already in progress or completed
+    if (
+      grnLine.putaway_status === "IN_PROGRESS" ||
+      grnLine.putaway_status === "COMPLETED"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Putaway task already in progress or completed",
+      });
+    }
+
+    // Start the putaway task
+    await grnLine.update({
+      putaway_status: "IN_PROGRESS",
+    });
+
+    res.json({
+      success: true,
+      message: "Putaway task started successfully",
+      data: grnLine,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   getGRNLineById,
   updateGRNLine,
   getSuggestedLocation,
   bulkUpdateGRNLines,
   getAllGRNLines,
+  startPutawayTask,
 };

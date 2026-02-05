@@ -5,6 +5,7 @@ import {
   getSuggestedLocation,
   bulkUpdateGRNLines,
   getAllGRNLines,
+  startPutawayTask,
 } from "../controllers/grnLineController.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 
@@ -33,6 +34,12 @@ router.put(
   "/bulk/update",
   authorize("WAREHOUSE", "UPDATE"),
   bulkUpdateGRNLines,
+);
+
+router.post(
+  "/start-putaway/:lineId",
+  authorize("WAREHOUSE", "UPDATE"),
+  startPutawayTask,
 );
 
 export default router;
