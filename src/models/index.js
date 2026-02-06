@@ -20,6 +20,12 @@ import Location from "./Location.js";
 import Inventory from "./Inventory.js";
 import InventoryHold from "./InventoryHold.js";
 import InventoryTransaction from "./InventoryTransaction.js";
+import SalesOrder from "./SaleOrder.js";
+import SalesOrderLine from "./SalesOrderLine.js";
+import PickWave from "./PIckWave.js";
+import PickWaveOrder from "./PickWaveOrder.js";
+import PickTask from "./PickTask.js";
+import StockAllocation from "./StockAllocation.js";
 
 // Define Associations
 
@@ -341,6 +347,136 @@ InventoryTransaction.belongsTo(Location, {
 InventoryTransaction.belongsTo(User, {
   foreignKey: "performed_by",
   as: "performer",
+});
+
+// SalesOrder associations
+SalesOrder.belongsTo(Warehouse, {
+  foreignKey: "warehouse_id",
+  as: "warehouse",
+});
+SalesOrder.belongsTo(Client, { foreignKey: "client_id", as: "client" });
+SalesOrder.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+SalesOrder.belongsTo(User, { foreignKey: "updated_by", as: "updater" });
+SalesOrder.hasMany(SalesOrderLine, { foreignKey: "order_id", as: "lines" });
+SalesOrder.belongsToMany(PickWave, {
+  through: PickWaveOrder,
+  foreignKey: "order_id",
+  otherKey: "wave_id",
+  as: "waves",
+});
+SalesOrder.hasMany(PickTask, { foreignKey: "order_id", as: "pickTasks" });
+SalesOrder.hasMany(StockAllocation, {
+  foreignKey: "order_id",
+  as: "allocations",
+});
+
+SalesOrderLine.belongsTo(SalesOrder, { foreignKey: "order_id", as: "order" });
+SalesOrderLine.belongsTo(SKU, { foreignKey: "sku_id", as: "sku" });
+SalesOrderLine.hasMany(PickTask, {
+  foreignKey: "order_line_id",
+  as: "pickTasks",
+});
+SalesOrderLine.hasMany(StockAllocation, {
+  foreignKey: "order_line_id",
+  as: "allocations",
+});
+
+PickWave.belongsTo(Warehouse, { foreignKey: "warehouse_id", as: "warehouse" });
+PickWave.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+PickWave.belongsTo(User, { foreignKey: "updated_by", as: "updater" });
+PickWave.belongsTo(User, { foreignKey: "released_by", as: "releaser" });
+PickWave.belongsToMany(SalesOrder, {
+  through: PickWaveOrder,
+  foreignKey: "wave_id",
+  otherKey: "order_id",
+  as: "orders",
+});
+PickWave.hasMany(PickTask, { foreignKey: "wave_id", as: "tasks" });
+
+PickWaveOrder.belongsTo(PickWave, { foreignKey: "wave_id", as: "wave" });
+PickWaveOrder.belongsTo(SalesOrder, { foreignKey: "order_id", as: "order" });
+
+PickTask.belongsTo(PickWave, { foreignKey: "wave_id", as: "wave" });
+PickTask.belongsTo(SalesOrder, { foreignKey: "order_id", as: "order" });
+PickTask.belongsTo(SalesOrderLine, {
+  foreignKey: "order_line_id",
+  as: "orderLine",
+});
+PickTask.belongsTo(SKU, { foreignKey: "sku_id", as: "sku" });
+PickTask.belongsTo(Inventory, { foreignKey: "inventory_id", as: "inventory" });
+PickTask.belongsTo(Location, {
+  foreignKey: "source_location_id",
+  as: "sourceLocation",
+});
+PickTask.belongsTo(Location, {
+  foreignKey: "staging_location_id",
+  as: "stagingLocation",
+});
+PickTask.belongsTo(User, { foreignKey: "assigned_to", as: "picker" });
+PickTask.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+PickTask.belongsTo(User, { foreignKey: "updated_by", as: "updater" });
+
+StockAllocation.belongsTo(SalesOrder, { foreignKey: "order_id", as: "order" });
+StockAllocation.belongsTo(SalesOrderLine, {
+  foreignKey: "order_line_id",
+  as: "orderLine",
+});
+StockAllocation.belongsTo(SKU, { foreignKey: "sku_id", as: "sku" });
+StockAllocation.belongsTo(Inventory, {
+  foreignKey: "inventory_id",
+  as: "inventory",
+});
+StockAllocation.belongsTo(Location, {
+  foreignKey: "location_id",
+  as: "location",
+});
+StockAllocation.belongsTo(Warehouse, {
+  foreignKey: "warehouse_id",
+  as: "warehouse",
+});
+StockAllocation.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+
+Inventory.hasMany(PickTask, { foreignKey: "inventory_id", as: "pickTasks" });
+Inventory.hasMany(StockAllocation, {
+  foreignKey: "inventory_id",
+  as: "allocations",
+});
+
+Location.hasMany(PickTask, {
+  foreignKey: "source_location_id",
+  as: "pickTasksFrom",
+});
+Location.hasMany(PickTask, {
+  foreignKey: "staging_location_id",
+  as: "pickTasksStaging",
+});
+Location.hasMany(StockAllocation, {
+  foreignKey: "location_id",
+  as: "allocations",
+});
+
+SKU.hasMany(SalesOrderLine, { foreignKey: "sku_id", as: "orderLines" });
+SKU.hasMany(PickTask, { foreignKey: "sku_id", as: "pickTasks" });
+SKU.hasMany(StockAllocation, { foreignKey: "sku_id", as: "allocations" });
+
+Warehouse.hasMany(SalesOrder, {
+  foreignKey: "warehouse_id",
+  as: "salesOrders",
+});
+Warehouse.hasMany(PickWave, { foreignKey: "warehouse_id", as: "pickWaves" });
+Warehouse.hasMany(StockAllocation, {
+  foreignKey: "warehouse_id",
+  as: "allocations",
+});
+Client.hasMany(SalesOrder, { foreignKey: "client_id", as: "salesOrders" });
+
+User.hasMany(SalesOrder, { foreignKey: "created_by", as: "createdOrders" });
+User.hasMany(PickWave, { foreignKey: "created_by", as: "createdWaves" });
+User.hasMany(PickWave, { foreignKey: "released_by", as: "releasedWaves" });
+User.hasMany(PickTask, { foreignKey: "assigned_to", as: "assignedPickTasks" });
+User.hasMany(StockAllocation, {
+  foreignKey: "created_by",
+  as: "createdAllocations",
 });
 
 // Sync function
