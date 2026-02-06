@@ -716,6 +716,49 @@ export const transferStock = async (req, res, next) => {
   }
 };
 
+export const groupInventoryBySKU = async (req, res, next) => {
+  try {
+    const { warehouse_id, client_id } = req.query;
+
+    const where = {};
+    if (warehouse_id) where.warehouse_id = warehouse_id;
+    if (client_id) where.client_id = client_id;
+
+    const inventory = await Inventory.findAll({
+      where,
+      attributes: [
+        "sku_id",
+        [sequelize.fn("SUM", sequelize.col("on_hand_qty")), "total_on_hand"],
+        [
+          sequelize.fn("SUM", sequelize.col("available_qty")),
+          "total_available",
+        ],
+        [sequelize.fn("SUM", sequelize.col("hold_qty")), "total_hold"],
+        [
+          sequelize.fn("SUM", sequelize.col("allocated_qty")),
+          "total_allocated",
+        ],
+        [sequelize.fn("SUM", sequelize.col("damaged_qty")), "total_damaged"],
+      ],
+      include: [
+        {
+          model: SKU,
+          attributes: ["id", "sku_code", "sku_name", "category", "uom"],
+          as: "sku",
+        },
+      ],
+      group: ["sku_id"],
+    });
+
+    res.json({
+      success: true,
+      data: inventory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get inventory transaction history
 export const getInventoryTransactions = async (req, res, next) => {
   try {

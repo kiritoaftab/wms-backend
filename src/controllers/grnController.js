@@ -458,7 +458,7 @@ const completePutawayTask = async (req, res, next) => {
         sku_id: grnLine.sku_id,
         location_id:
           grnLine.destination_location_id || grnLine.destination_location?.id,
-        batch_no: grnLine.batch_no || null,
+        // batch_no: grnLine.batch_no || null,
       },
       defaults: {
         client_id: asn.client_id,
