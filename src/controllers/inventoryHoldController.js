@@ -4,6 +4,7 @@ import {
   SKU,
   Location,
   Warehouse,
+  User,
 } from "../models/index.js";
 import { Op } from "sequelize";
 import { sequelize } from "../config/database.js";
@@ -245,6 +246,16 @@ export const getAllHolds = async (req, res, next) => {
             },
           ],
           as: "inventory",
+        },
+        {
+          model: User,
+          attributes: ["id", "username", "email"],
+          as: "creator",
+        },
+        {
+          model: User,
+          attributes: ["id", "username", "email"],
+          as: "releaser",
         },
       ],
       limit: parseInt(limit),
