@@ -20,6 +20,13 @@ import locationRoutes from "./locationRoutes.js";
 import inventoryRoutes from "./inventoryRoutes.js";
 import inventoryHoldRoutes from "./inventoryHoldRoutes.js";
 
+// Outbound routes
+import salesOrderRoutes from "./salesOrderRoutes.js";
+import salesOrderLineRoutes from "./salesOrderLineRoutes.js";
+import stockAllocationRoutes from "./stockAllocationRoutes.js";
+import pickWaveRoutes from "./pickWaveRoutes.js";
+import pickTaskRoutes from "./pickTaskRoutes.js";
+
 const router = express.Router();
 
 // API routes
@@ -42,6 +49,13 @@ router.use("/grn-lines", grnLineRoutes);
 router.use("/locations", locationRoutes);
 router.use("/inventory", inventoryRoutes);
 router.use("/inventory-holds", inventoryHoldRoutes);
+
+// Outbound operations
+router.use("/sales-orders", salesOrderRoutes);
+router.use("/sales-order-lines", salesOrderLineRoutes);
+router.use("/stock-allocations", stockAllocationRoutes);
+router.use("/pick-waves", pickWaveRoutes);
+router.use("/pick-tasks", pickTaskRoutes);
 
 // Health check
 router.get("/health", (req, res) => {

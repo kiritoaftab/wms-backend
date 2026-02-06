@@ -513,5 +513,11 @@ export {
   Inventory,
   InventoryHold,
   InventoryTransaction,
+  SalesOrder,
+  SalesOrderLine,
+  PickWave,
+  PickWaveOrder,
+  PickTask,
+  StockAllocation,
   syncDatabase,
 };
