@@ -9,6 +9,7 @@ import {
   transferStock,
   getInventoryTransactions,
   groupInventoryBySKU,
+  groupInventoryByZone,
 } from "../controllers/inventoryController.js";
 import { authenticate } from "../middleware/auth.js";
 
@@ -31,6 +32,8 @@ router.get("/transactions", getInventoryTransactions);
 
 // Group inventory by SKU (for reporting)
 router.get("/group-by-sku", groupInventoryBySKU);
+
+router.get("/group-by-zone", groupInventoryByZone);
 
 // Get all inventory (with filters)
 router.get("/", getAllInventory);
