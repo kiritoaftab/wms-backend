@@ -99,8 +99,26 @@ const Inventory = sequelize.define(
     indexes: [
       {
         unique: true,
-        fields: ["warehouse_id", "sku_id", "location_id", "batch_no"],
+        fields: ["warehouse_id", "sku_id", "location_id"],
         name: "unique_inventory_record",
+      },
+      {
+        // NON-UNIQUE index for batch queries (optional filtering)
+        fields: ["batch_no"],
+        name: "idx_batch_no",
+      },
+      {
+        // For expiry-based queries
+        fields: ["expiry_date"],
+        name: "idx_expiry_date",
+      },
+      {
+        fields: ["status"],
+        name: "idx_status",
+      },
+      {
+        fields: ["warehouse_id", "sku_id"],
+        name: "idx_warehouse_sku",
       },
     ],
   },

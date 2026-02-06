@@ -282,7 +282,7 @@ const getAllGRNLines = async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     // const { warehouse_id } = req.query;
-    const grnLines = await GRNLine.findAll({
+    const { count, rows: grnLines } = await GRNLine.findAndCountAll({
       // where: warehouse_id ? { warehouse_id } : {},
       include: [
         { model: SKU, as: "sku" },
@@ -299,6 +299,12 @@ const getAllGRNLines = async (req, res, next) => {
     res.json({
       success: true,
       data: grnLines,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        pages: Math.ceil(count / limit),
+      },
     });
   } catch (error) {
     next(error);
