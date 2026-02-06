@@ -578,22 +578,23 @@ export const transferStock = async (req, res, next) => {
     // Reduce from source
     const newSourceQty =
       parseFloat(sourceInventory.on_hand_qty) - parseFloat(qty);
-    await sourceInventory.update(
-      {
-        on_hand_qty: newSourceQty,
-        available_qty:
-          newSourceQty -
-          parseFloat(sourceInventory.hold_qty) -
-          parseFloat(sourceInventory.allocated_qty),
-        status:
-          newSourceQty === 0
-            ? "OUT_OF_STOCK"
-            : newSourceQty < 10
-              ? "LOW_STOCK"
-              : "HEALTHY",
-      },
-      { transaction: t },
-    );
+    if (newSourceQty === 0) {
+      // Delete the inventory record when quantity reaches 0
+      await sourceInventory.destroy({ transaction: t });
+    } else {
+      // Update with new quantity
+      await sourceInventory.update(
+        {
+          on_hand_qty: newSourceQty,
+          available_qty:
+            newSourceQty -
+            parseFloat(sourceInventory.hold_qty) -
+            parseFloat(sourceInventory.allocated_qty),
+          status: newSourceQty < 10 ? "LOW_STOCK" : "HEALTHY",
+        },
+        { transaction: t },
+      );
+    }
 
     // Find or create destination inventory
     let destInventory = await Inventory.findOne({
