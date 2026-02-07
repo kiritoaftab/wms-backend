@@ -13,11 +13,9 @@ import {
   releaseOrderAllocations,
 } from "../services/allocationService.js";
 
-/**
- * Get allocations for a specific order
- * GET /api/stock-allocations/order/:orderId
- */
-export async function getOrderAllocations(req, res) {
+// Get allocations for a specific order
+// GET /api/stock-allocations/order/:orderId
+const getOrderAllocations = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const { status } = req.query;
@@ -32,29 +30,28 @@ export async function getOrderAllocations(req, res) {
       include: [
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Inventory,
-          include: [Location],
+          as: "inventory",
+          include: [{ model: Location, as: "location" }],
         },
-        Warehouse,
+        { model: Warehouse, as: "warehouse" },
       ],
       order: [["created_at", "DESC"]],
     });
 
     res.json(allocations);
   } catch (error) {
-    console.error("Error fetching order allocations:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get all allocations with filters
- * GET /api/stock-allocations?warehouse_id=1&status=ACTIVE
- */
-export async function getAllAllocations(req, res) {
+// Get all allocations with filters
+// GET /api/stock-allocations
+const getAllAllocations = async (req, res, next) => {
   try {
     const {
       warehouse_id,
@@ -78,15 +75,18 @@ export async function getAllAllocations(req, res) {
       include: [
         {
           model: SalesOrder,
+          as: "order",
           attributes: ["order_no", "customer_name", "status"],
         },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Inventory,
-          include: [Location],
+          as: "inventory",
+          include: [{ model: Location, as: "location" }],
         },
       ],
       order: [["created_at", "DESC"]],
@@ -101,31 +101,30 @@ export async function getAllAllocations(req, res) {
       allocations: rows,
     });
   } catch (error) {
-    console.error("Error fetching allocations:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get single allocation by ID
- * GET /api/stock-allocations/:id
- */
-export async function getAllocationById(req, res) {
+// Get single allocation by ID
+// GET /api/stock-allocations/:id
+const getAllocationById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const allocation = await StockAllocation.findByPk(id, {
       include: [
-        SalesOrder,
+        { model: SalesOrder, as: "order" },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Inventory,
-          include: [Location],
+          as: "inventory",
+          include: [{ model: Location, as: "location" }],
         },
-        Warehouse,
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -135,16 +134,13 @@ export async function getAllocationById(req, res) {
 
     res.json(allocation);
   } catch (error) {
-    console.error("Error fetching allocation:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Manually allocate inventory for an order
- * POST /api/stock-allocations/allocate
- */
-export async function manualAllocate(req, res) {
+// Manually allocate inventory for an order
+// POST /api/stock-allocations/allocate
+const manualAllocate = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -166,7 +162,6 @@ export async function manualAllocate(req, res) {
 
     const result = await allocateOrder(order_id, transaction);
 
-    // Update order status
     if (result.fullyAllocated) {
       await order.update(
         {
@@ -174,7 +169,7 @@ export async function manualAllocate(req, res) {
           allocation_status: "FULL",
           allocated_at: new Date(),
         },
-        { transaction }
+        { transaction },
       );
     } else if (result.partiallyAllocated) {
       await order.update(
@@ -182,14 +177,14 @@ export async function manualAllocate(req, res) {
           status: "PARTIAL_ALLOCATION",
           allocation_status: "PARTIAL",
         },
-        { transaction }
+        { transaction },
       );
     } else {
       await order.update(
         {
           allocation_status: "FAILED",
         },
-        { transaction }
+        { transaction },
       );
     }
 
@@ -200,17 +195,16 @@ export async function manualAllocate(req, res) {
       result,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error allocating order:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Release a specific allocation
- * POST /api/stock-allocations/:id/release
- */
-export async function releaseSingleAllocation(req, res) {
+// Release a specific allocation
+// POST /api/stock-allocations/:id/release
+const releaseSingleAllocation = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -220,7 +214,7 @@ export async function releaseSingleAllocation(req, res) {
     const result = await releaseAllocation(
       id,
       reason || "Manual release",
-      transaction
+      transaction,
     );
 
     await transaction.commit();
@@ -230,17 +224,16 @@ export async function releaseSingleAllocation(req, res) {
       ...result,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error releasing allocation:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Release all allocations for an order
- * POST /api/stock-allocations/order/:orderId/release-all
- */
-export async function releaseOrderAllAllocations(req, res) {
+// Release all allocations for an order
+// POST /api/stock-allocations/order/:orderId/release-all
+const releaseOrderAllAllocations = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -250,7 +243,7 @@ export async function releaseOrderAllAllocations(req, res) {
     const result = await releaseOrderAllocations(
       orderId,
       reason || "Manual release of all allocations",
-      transaction
+      transaction,
     );
 
     await transaction.commit();
@@ -260,17 +253,16 @@ export async function releaseOrderAllAllocations(req, res) {
       ...result,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error releasing order allocations:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Get allocation statistics
- * GET /api/stock-allocations/stats?warehouse_id=1
- */
-export async function getAllocationStats(req, res) {
+// Get allocation statistics
+// GET /api/stock-allocations/stats
+const getAllocationStats = async (req, res, next) => {
   try {
     const { warehouse_id, sku_id } = req.query;
 
@@ -298,7 +290,16 @@ export async function getAllocationStats(req, res) {
 
     res.json(stats);
   } catch (error) {
-    console.error("Error fetching allocation stats:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
+
+export {
+  getOrderAllocations,
+  getAllAllocations,
+  getAllocationById,
+  manualAllocate,
+  releaseSingleAllocation,
+  releaseOrderAllAllocations,
+  getAllocationStats,
+};

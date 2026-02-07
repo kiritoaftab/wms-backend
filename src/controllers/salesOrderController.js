@@ -12,11 +12,9 @@ import {
   releaseOrderAllocations,
 } from "../services/allocationService.js";
 
-/**
- * Create new sales order with lines
- * POST /api/sales-orders
- */
-export async function createOrder(req, res) {
+// Create new sales order with lines
+// POST /api/sales-orders
+const createOrder = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -44,42 +42,43 @@ export async function createOrder(req, res) {
       notes,
       payment_mode,
       cod_amount,
-      lines, // Array of { sku_id, ordered_qty, uom, allocation_rule, unit_price, ... }
+      lines,
     } = req.body;
 
-    // Validation
     if (!warehouse_id || !client_id || !customer_name) {
+      await transaction.rollback();
       return res.status(400).json({
         error: "warehouse_id, client_id, and customer_name are required",
       });
     }
 
     if (!lines || lines.length === 0) {
-      return res.status(400).json({ error: "Order must have at least one line" });
+      await transaction.rollback();
+      return res
+        .status(400)
+        .json({ error: "Order must have at least one line" });
     }
 
-    // Verify warehouse and client exist
-    const warehouse = await Warehouse.findByPk(warehouse_id);
+    const warehouse = await Warehouse.findByPk(warehouse_id, { transaction });
     if (!warehouse) {
+      await transaction.rollback();
       return res.status(404).json({ error: "Warehouse not found" });
     }
 
-    const client = await Client.findByPk(client_id);
+    const client = await Client.findByPk(client_id, { transaction });
     if (!client) {
+      await transaction.rollback();
       return res.status(404).json({ error: "Client not found" });
     }
 
-    // Generate order number
     const orderNo = await generateOrderNo();
 
-    // Calculate order totals
     const totalLines = lines.length;
     const totalOrderedUnits = lines.reduce(
       (sum, line) => sum + parseFloat(line.ordered_qty || 0),
-      0
+      0,
     );
 
-    // Create order
     const order = await SalesOrder.create(
       {
         order_no: orderNo,
@@ -112,21 +111,21 @@ export async function createOrder(req, res) {
         cod_amount,
         created_by: req.user?.id,
       },
-      { transaction }
+      { transaction },
     );
 
-    // Create order lines
-    const orderLines = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Verify SKU exists
-      const sku = await SKU.findByPk(line.sku_id);
+      const sku = await SKU.findByPk(line.sku_id, { transaction });
       if (!sku) {
-        throw new Error(`SKU with id ${line.sku_id} not found`);
+        await transaction.rollback();
+        return res
+          .status(404)
+          .json({ error: `SKU with id ${line.sku_id} not found` });
       }
 
-      const orderLine = await SalesOrderLine.create(
+      await SalesOrderLine.create(
         {
           order_id: order.id,
           line_no: i + 1,
@@ -147,23 +146,21 @@ export async function createOrder(req, res) {
           status: "PENDING",
           notes: line.notes,
         },
-        { transaction }
+        { transaction },
       );
-
-      orderLines.push(orderLine);
     }
 
     await transaction.commit();
 
-    // Fetch complete order with lines
     const completeOrder = await SalesOrder.findByPk(order.id, {
       include: [
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "lines",
+          include: [{ model: SKU, as: "sku" }],
         },
-        Client,
-        Warehouse,
+        { model: Client, as: "client" },
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -172,17 +169,16 @@ export async function createOrder(req, res) {
       order: completeOrder,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error creating sales order:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Get all sales orders with filters
- * GET /api/sales-orders?warehouse_id=1&status=CONFIRMED&client_id=2
- */
-export async function getAllOrders(req, res) {
+// Get all sales orders with filters
+// GET /api/sales-orders
+const getAllOrders = async (req, res, next) => {
   try {
     const {
       warehouse_id,
@@ -218,10 +214,11 @@ export async function getAllOrders(req, res) {
       include: [
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "lines",
+          include: [{ model: SKU, as: "sku" }],
         },
-        Client,
-        Warehouse,
+        { model: Client, as: "client" },
+        { model: Warehouse, as: "warehouse" },
       ],
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
@@ -235,16 +232,13 @@ export async function getAllOrders(req, res) {
       orders: rows,
     });
   } catch (error) {
-    console.error("Error fetching sales orders:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get single order by ID
- * GET /api/sales-orders/:id
- */
-export async function getOrderById(req, res) {
+// Get single order by ID
+// GET /api/sales-orders/:id
+const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -252,17 +246,19 @@ export async function getOrderById(req, res) {
       include: [
         {
           model: SalesOrderLine,
+          as: "lines",
           include: [
-            SKU,
+            { model: SKU, as: "sku" },
             {
               model: StockAllocation,
+              as: "allocations",
               where: { status: ["ACTIVE", "CONSUMED"] },
               required: false,
             },
           ],
         },
-        Client,
-        Warehouse,
+        { model: Client, as: "client" },
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -272,16 +268,13 @@ export async function getOrderById(req, res) {
 
     res.json(order);
   } catch (error) {
-    console.error("Error fetching order:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Update sales order
- * PUT /api/sales-orders/:id
- */
-export async function updateOrder(req, res) {
+// Update sales order
+// PUT /api/sales-orders/:id
+const updateOrder = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -295,7 +288,6 @@ export async function updateOrder(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Prevent update if order is beyond DRAFT/CONFIRMED status
     if (!["DRAFT", "CONFIRMED"].includes(order.status)) {
       await transaction.rollback();
       return res.status(400).json({
@@ -303,22 +295,21 @@ export async function updateOrder(req, res) {
       });
     }
 
-    // Add updated_by
     updateData.updated_by = req.user?.id;
 
     await order.update(updateData, { transaction });
 
     await transaction.commit();
 
-    // Fetch updated order
     const updatedOrder = await SalesOrder.findByPk(id, {
       include: [
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "lines",
+          include: [{ model: SKU, as: "sku" }],
         },
-        Client,
-        Warehouse,
+        { model: Client, as: "client" },
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -327,24 +318,23 @@ export async function updateOrder(req, res) {
       order: updatedOrder,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error updating order:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Confirm order and trigger auto-allocation
- * POST /api/sales-orders/:id/confirm
- */
-export async function confirmOrder(req, res) {
+// Confirm order and trigger auto-allocation
+// POST /api/sales-orders/:id/confirm
+const confirmOrder = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
     const { id } = req.params;
 
     const order = await SalesOrder.findByPk(id, {
-      include: [SalesOrderLine],
+      include: [{ model: SalesOrderLine, as: "lines" }],
       transaction,
     });
 
@@ -360,19 +350,17 @@ export async function confirmOrder(req, res) {
       });
     }
 
-    // Update to CONFIRMED first
     await order.update(
       {
         status: "CONFIRMED",
         confirmed_at: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
     // AUTO-ALLOCATE INVENTORY
     const allocationResult = await allocateOrder(id, transaction);
 
-    // Update order status based on allocation result
     if (allocationResult.fullyAllocated) {
       await order.update(
         {
@@ -380,7 +368,7 @@ export async function confirmOrder(req, res) {
           allocation_status: "FULL",
           allocated_at: new Date(),
         },
-        { transaction }
+        { transaction },
       );
     } else if (allocationResult.partiallyAllocated) {
       await order.update(
@@ -388,35 +376,36 @@ export async function confirmOrder(req, res) {
           status: "PARTIAL_ALLOCATION",
           allocation_status: "PARTIAL",
         },
-        { transaction }
+        { transaction },
       );
     } else {
       await order.update(
         {
           allocation_status: "FAILED",
         },
-        { transaction }
+        { transaction },
       );
     }
 
     await transaction.commit();
 
-    // Fetch complete order
     const confirmedOrder = await SalesOrder.findByPk(id, {
       include: [
         {
           model: SalesOrderLine,
+          as: "lines",
           include: [
-            SKU,
+            { model: SKU, as: "sku" },
             {
               model: StockAllocation,
+              as: "allocations",
               where: { status: "ACTIVE" },
               required: false,
             },
           ],
         },
-        Client,
-        Warehouse,
+        { model: Client, as: "client" },
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -426,17 +415,16 @@ export async function confirmOrder(req, res) {
       allocation: allocationResult,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error confirming order:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Cancel sales order
- * DELETE /api/sales-orders/:id/cancel
- */
-export async function cancelOrder(req, res) {
+// Cancel sales order
+// DELETE /api/sales-orders/:id/cancel
+const cancelOrder = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -450,10 +438,9 @@ export async function cancelOrder(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Can only cancel before picking starts
     if (
       !["DRAFT", "CONFIRMED", "ALLOCATED", "PARTIAL_ALLOCATION"].includes(
-        order.status
+        order.status,
       )
     ) {
       await transaction.rollback();
@@ -462,14 +449,12 @@ export async function cancelOrder(req, res) {
       });
     }
 
-    // Release all active allocations
     const releaseResult = await releaseOrderAllocations(
       id,
       cancellation_reason || "Order cancelled",
-      transaction
+      transaction,
     );
 
-    // Cancel all order lines
     await SalesOrderLine.update(
       {
         status: "CANCELLED",
@@ -479,17 +464,16 @@ export async function cancelOrder(req, res) {
       {
         where: { order_id: id },
         transaction,
-      }
+      },
     );
 
-    // Cancel order
     await order.update(
       {
         status: "CANCELLED",
         cancelled_at: new Date(),
         cancellation_reason,
       },
-      { transaction }
+      { transaction },
     );
 
     await transaction.commit();
@@ -500,17 +484,16 @@ export async function cancelOrder(req, res) {
       released_qty: releaseResult.total_qty_released,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error cancelling order:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Get order statistics
- * GET /api/sales-orders/stats?warehouse_id=1
- */
-export async function getOrderStats(req, res) {
+// Get order statistics
+// GET /api/sales-orders/stats
+const getOrderStats = async (req, res, next) => {
   try {
     const { warehouse_id, client_id } = req.query;
 
@@ -533,7 +516,16 @@ export async function getOrderStats(req, res) {
 
     res.json(stats);
   } catch (error) {
-    console.error("Error fetching order stats:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
+
+export {
+  createOrder,
+  getAllOrders,
+  getOrderById,
+  updateOrder,
+  confirmOrder,
+  cancelOrder,
+  getOrderStats,
+};

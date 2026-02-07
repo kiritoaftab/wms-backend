@@ -16,7 +16,8 @@ export async function allocateOrder(orderId, transaction) {
     include: [
       {
         model: SalesOrderLine,
-        include: [SKU],
+        include: [{ model: SKU, as: "sku" }],
+        as: "lines",
       },
     ],
     transaction,
@@ -28,7 +29,7 @@ export async function allocateOrder(orderId, transaction) {
 
   if (!["CONFIRMED", "PARTIAL_ALLOCATION"].includes(order.status)) {
     throw new Error(
-      `Cannot allocate order with status: ${order.status}. Order must be CONFIRMED.`
+      `Cannot allocate order with status: ${order.status}. Order must be CONFIRMED.`,
     );
   }
 
@@ -37,7 +38,7 @@ export async function allocateOrder(orderId, transaction) {
   const allocationDetails = [];
 
   // Allocate each order line
-  for (const line of order.SalesOrderLines) {
+  for (const line of order.lines) {
     const result = await allocateOrderLine(line, order, transaction);
 
     allocationDetails.push({
@@ -74,8 +75,13 @@ export async function allocateOrder(orderId, transaction) {
  * Supports FIFO, FEFO, LIFO allocation rules
  */
 export async function allocateOrderLine(orderLine, order, transaction) {
-  const { sku_id, ordered_qty, allocation_rule, order_id, id: order_line_id } =
-    orderLine;
+  const {
+    sku_id,
+    ordered_qty,
+    allocation_rule,
+    order_id,
+    id: order_line_id,
+  } = orderLine;
   const warehouseId = order.warehouse_id;
 
   // Calculate remaining quantity to allocate
@@ -107,7 +113,9 @@ export async function allocateOrderLine(orderLine, order, transaction) {
     sku_id: sku_id,
     status: "HEALTHY",
     [Op.and]: [
-      sequelize.literal("(on_hand_qty - allocated_qty - hold_qty - damaged_qty) > 0"),
+      sequelize.literal(
+        "(on_hand_qty - allocated_qty - hold_qty - damaged_qty) > 0",
+      ),
     ],
   };
 
@@ -163,7 +171,7 @@ export async function allocateOrderLine(orderLine, order, transaction) {
     const qtyToAllocate = Math.min(remainingQty, availableQty);
 
     // Generate allocation number
-    const allocationNo = await generateAllocationNo();
+    const allocationNo = await generateAllocationNo(transaction);
 
     // Create allocation record
     const allocation = await StockAllocation.create(
@@ -185,7 +193,7 @@ export async function allocateOrderLine(orderLine, order, transaction) {
         status: "ACTIVE",
         allocated_at: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
     // Update inventory
@@ -193,7 +201,7 @@ export async function allocateOrderLine(orderLine, order, transaction) {
       {
         allocated_qty: parseFloat(inventory.allocated_qty) + qtyToAllocate,
       },
-      { transaction }
+      { transaction },
     );
 
     allocations.push(allocation);
@@ -216,7 +224,7 @@ export async function allocateOrderLine(orderLine, order, transaction) {
       allocated_qty: newAllocatedQty,
       status: lineStatus,
     },
-    { transaction }
+    { transaction },
   );
 
   return {
@@ -232,7 +240,10 @@ export async function allocateOrderLine(orderLine, order, transaction) {
  */
 export async function releaseAllocation(allocationId, reason, transaction) {
   const allocation = await StockAllocation.findByPk(allocationId, {
-    include: [Inventory, SalesOrderLine],
+    include: [
+      { model: Inventory, as: "inventory" },
+      { model: SalesOrderLine, as: "orderLine" },
+    ],
     transaction,
   });
 
@@ -242,7 +253,7 @@ export async function releaseAllocation(allocationId, reason, transaction) {
 
   if (allocation.status !== "ACTIVE") {
     throw new Error(
-      `Cannot release allocation with status: ${allocation.status}`
+      `Cannot release allocation with status: ${allocation.status}`,
     );
   }
 
@@ -250,12 +261,12 @@ export async function releaseAllocation(allocationId, reason, transaction) {
   const qtyToRelease = allocation.remaining_qty;
 
   // Update inventory (restore allocated quantity)
-  await allocation.Inventory.update(
+  await allocation.inventory.update(
     {
       allocated_qty:
-        parseFloat(allocation.Inventory.allocated_qty) - qtyToRelease,
+        parseFloat(allocation.inventory.allocated_qty) - qtyToRelease,
     },
-    { transaction }
+    { transaction },
   );
 
   // Update allocation status
@@ -266,11 +277,11 @@ export async function releaseAllocation(allocationId, reason, transaction) {
       released_reason: reason,
       remaining_qty: 0,
     },
-    { transaction }
+    { transaction },
   );
 
   // Update order line
-  const orderLine = allocation.SalesOrderLine;
+  const orderLine = allocation.orderLine;
   const newAllocatedQty =
     parseFloat(orderLine.allocated_qty) - allocation.allocated_qty;
 
@@ -279,7 +290,7 @@ export async function releaseAllocation(allocationId, reason, transaction) {
       allocated_qty: newAllocatedQty,
       status: newAllocatedQty === 0 ? "PENDING" : "PARTIAL_ALLOCATION",
     },
-    { transaction }
+    { transaction },
   );
 
   return {
@@ -313,7 +324,10 @@ export async function releaseOrderAllocations(orderId, reason, transaction) {
 
   return {
     released_count: results.length,
-    total_qty_released: results.reduce((sum, r) => sum + r.qty_released, 0),
+    total_qty_released: results.reduce(
+      (sum, r) => sum + Number(r.qty_released),
+      0,
+    ),
   };
 }
 
@@ -335,7 +349,7 @@ async function updateOrderTotals(orderId, transaction) {
       total_allocated_units:
         acc.total_allocated_units + parseFloat(line.allocated_qty),
     }),
-    { total_lines: 0, total_ordered_units: 0, total_allocated_units: 0 }
+    { total_lines: 0, total_ordered_units: 0, total_allocated_units: 0 },
   );
 
   await SalesOrder.update(totals, {

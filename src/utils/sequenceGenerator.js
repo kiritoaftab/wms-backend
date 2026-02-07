@@ -2,7 +2,7 @@ import SalesOrder from "../models/SaleOrder.js";
 import StockAllocation from "../models/StockAllocation.js";
 import PickWave from "../models/PIckWave.js";
 import PickTask from "../models/PickTask.js";
-
+import { sequelize } from "../config/database.js";
 /**
  * Generate sequential Sales Order number
  * Format: SO-00001
@@ -26,19 +26,24 @@ export async function generateOrderNo() {
  * Generate sequential Allocation number
  * Format: ALLOC-00001
  */
-export async function generateAllocationNo() {
-  const lastAllocation = await StockAllocation.findOne({
-    order: [["id", "DESC"]],
-    attributes: ["allocation_no"],
-  });
+export async function generateAllocationNo(transaction) {
+  // Atomically increment and store the value
+  await sequelize.query(
+    `
+    UPDATE allocation_sequences
+    SET current_value = LAST_INSERT_ID(current_value + 1)
+    WHERE name = 'ALLOC'
+    `,
+    { transaction },
+  );
 
-  if (!lastAllocation) {
-    return "ALLOC-00001";
-  }
+  // Fetch the incremented value
+  const [[{ value }]] = await sequelize.query(
+    `SELECT LAST_INSERT_ID() AS value`,
+    { transaction },
+  );
 
-  const lastNumber = parseInt(lastAllocation.allocation_no.split("-")[1]);
-  const nextNumber = lastNumber + 1;
-  return `ALLOC-${String(nextNumber).padStart(5, "0")}`;
+  return `ALLOC-${String(value).padStart(5, "0")}`;
 }
 
 /**

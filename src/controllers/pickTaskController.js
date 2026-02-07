@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { sequelize } from "../config/database.js";
 import PickTask from "../models/PickTask.js";
 import PickWave from "../models/PIckWave.js";
+import PickWaveOrder from "../models/PickWaveOrder.js";
 import SalesOrder from "../models/SaleOrder.js";
 import SalesOrderLine from "../models/SalesOrderLine.js";
 import StockAllocation from "../models/StockAllocation.js";
@@ -10,13 +11,14 @@ import InventoryTransaction from "../models/InventoryTransaction.js";
 import SKU from "../models/SKU.js";
 import Location from "../models/Location.js";
 import User from "../models/User.js";
-import { generatePickTaskNo, generateAllocationNo } from "../utils/sequenceGenerator.js";
+import {
+  generatePickTaskNo,
+  generateAllocationNo,
+} from "../utils/sequenceGenerator.js";
 
-/**
- * Get all pick tasks with filters
- * GET /api/pick-tasks?wave_id=1&status=PENDING&assigned_to=5
- */
-export async function getAllTasks(req, res) {
+// Get all pick tasks with filters
+// GET /api/pick-tasks
+const getAllTasks = async (req, res, next) => {
   try {
     const {
       wave_id,
@@ -34,7 +36,6 @@ export async function getAllTasks(req, res) {
     if (assigned_to) where.assigned_to = assigned_to;
     if (order_id) where.order_id = order_id;
 
-    // Filter by warehouse through wave
     const waveWhere = {};
     if (warehouse_id) waveWhere.warehouse_id = warehouse_id;
 
@@ -45,15 +46,18 @@ export async function getAllTasks(req, res) {
       include: [
         {
           model: PickWave,
+          as: "wave",
           where: Object.keys(waveWhere).length > 0 ? waveWhere : undefined,
         },
         {
           model: SalesOrder,
+          as: "order",
           attributes: ["order_no", "customer_name", "priority"],
         },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Location,
@@ -83,16 +87,13 @@ export async function getAllTasks(req, res) {
       tasks: rows,
     });
   } catch (error) {
-    console.error("Error fetching pick tasks:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get my assigned tasks (for picker)
- * GET /api/pick-tasks/my-tasks
- */
-export async function getMyTasks(req, res) {
+// Get my assigned tasks (for picker)
+// GET /api/pick-tasks/my-tasks
+const getMyTasks = async (req, res, next) => {
   try {
     const pickerId = req.user?.id;
 
@@ -104,22 +105,24 @@ export async function getMyTasks(req, res) {
         },
       },
       include: [
-        PickWave,
+        { model: PickWave, as: "wave" },
         {
           model: SalesOrder,
+          as: "order",
           attributes: ["order_no", "customer_name", "priority"],
         },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Location,
-          as: "SourceLocation",
+          as: "sourceLocation",
         },
         {
           model: Location,
-          as: "StagingLocation",
+          as: "stagingLocation",
           required: false,
         },
       ],
@@ -131,26 +134,24 @@ export async function getMyTasks(req, res) {
 
     res.json(tasks);
   } catch (error) {
-    console.error("Error fetching my tasks:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get task by ID
- * GET /api/pick-tasks/:id
- */
-export async function getTaskById(req, res) {
+// Get task by ID
+// GET /api/pick-tasks/:id
+const getTaskById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const task = await PickTask.findByPk(id, {
       include: [
-        PickWave,
-        SalesOrder,
+        { model: PickWave, as: "wave" },
+        { model: SalesOrder, as: "order" },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Location,
@@ -167,7 +168,7 @@ export async function getTaskById(req, res) {
           attributes: ["id", "username", "first_name", "last_name"],
           required: false,
         },
-        Inventory,
+        { model: Inventory, as: "inventory" },
       ],
     });
 
@@ -177,16 +178,13 @@ export async function getTaskById(req, res) {
 
     res.json(task);
   } catch (error) {
-    console.error("Error fetching pick task:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Manager assigns tasks to picker
- * POST /api/pick-tasks/assign
- */
-export async function assignTasks(req, res) {
+// Manager assigns tasks to picker
+// POST /api/pick-tasks/assign
+const assignTasks = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -199,7 +197,6 @@ export async function assignTasks(req, res) {
       });
     }
 
-    // Verify tasks exist and are PENDING
     const tasks = await PickTask.findAll({
       where: {
         id: task_ids,
@@ -215,14 +212,12 @@ export async function assignTasks(req, res) {
       });
     }
 
-    // Verify user exists
-    const user = await User.findByPk(user_id);
+    const user = await User.findByPk(user_id, { transaction });
     if (!user) {
       await transaction.rollback();
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Assign tasks
     await PickTask.update(
       {
         assigned_to: user_id,
@@ -232,7 +227,7 @@ export async function assignTasks(req, res) {
       {
         where: { id: task_ids },
         transaction,
-      }
+      },
     );
 
     await transaction.commit();
@@ -242,17 +237,16 @@ export async function assignTasks(req, res) {
       assigned_count: task_ids.length,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error assigning tasks:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Picker self-assigns next available task
- * POST /api/pick-tasks/self-assign
- */
-export async function selfAssignTask(req, res) {
+// Picker self-assigns next available task
+// POST /api/pick-tasks/self-assign
+const selfAssignTask = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -268,7 +262,6 @@ export async function selfAssignTask(req, res) {
       where.wave_id = wave_id;
     }
 
-    // Find next available task with row lock
     const task = await PickTask.findOne({
       where,
       order: [["pick_sequence", "ASC"]],
@@ -281,30 +274,29 @@ export async function selfAssignTask(req, res) {
       return res.status(404).json({ error: "No available tasks to assign" });
     }
 
-    // Assign to current user
     await task.update(
       {
         assigned_to: pickerId,
         status: "ASSIGNED",
         assigned_at: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
     await transaction.commit();
 
-    // Fetch complete task
     const completeTask = await PickTask.findByPk(task.id, {
       include: [
-        PickWave,
-        SalesOrder,
+        { model: PickWave, as: "wave" },
+        { model: SalesOrder, as: "order" },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Location,
-          as: "SourceLocation",
+          as: "sourceLocation",
         },
       ],
     });
@@ -314,24 +306,23 @@ export async function selfAssignTask(req, res) {
       task: completeTask,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error self-assigning task:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Start picking a task
- * POST /api/pick-tasks/:id/start
- */
-export async function startPicking(req, res) {
+// Start picking a task
+// POST /api/pick-tasks/:id/start
+const startPicking = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
     const { id } = req.params;
 
     const task = await PickTask.findByPk(id, {
-      include: [PickWave],
+      include: [{ model: PickWave, as: "wave" }],
       transaction,
     });
 
@@ -347,23 +338,21 @@ export async function startPicking(req, res) {
       });
     }
 
-    // Update task
     await task.update(
       {
         status: "IN_PROGRESS",
         pick_started_at: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
-    // Update wave status if first task
-    if (task.PickWave.status === "RELEASED") {
-      await task.PickWave.update(
+    if (task.wave.status === "RELEASED") {
+      await task.wave.update(
         {
           status: "IN_PROGRESS",
           picking_started_at: new Date(),
         },
-        { transaction }
+        { transaction },
       );
     }
 
@@ -371,17 +360,16 @@ export async function startPicking(req, res) {
 
     res.json({ message: "Picking started" });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error starting pick:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Complete picking with short pick handling
- * POST /api/pick-tasks/:id/complete
- */
-export async function completePicking(req, res) {
+// Complete picking with short pick handling
+// POST /api/pick-tasks/:id/complete
+const completePicking = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -390,10 +378,10 @@ export async function completePicking(req, res) {
 
     const task = await PickTask.findByPk(id, {
       include: [
-        PickWave,
-        SalesOrder,
-        SalesOrderLine,
-        Inventory,
+        { model: PickWave, as: "wave" },
+        { model: SalesOrder, as: "order" },
+        { model: SalesOrderLine, as: "orderLine" },
+        { model: Inventory, as: "inventory" },
       ],
       transaction,
     });
@@ -430,7 +418,7 @@ export async function completePicking(req, res) {
         short_pick_notes: isShortPick ? short_pick_notes : null,
         pick_completed_at: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
     // 2. Update stock allocation
@@ -453,24 +441,24 @@ export async function completePicking(req, res) {
           status: newRemainingQty <= 0 ? "CONSUMED" : "ACTIVE",
           consumed_at: new Date(),
         },
-        { transaction }
+        { transaction },
       );
     }
 
     // 3. Update inventory
-    await task.Inventory.update(
+    await task.inventory.update(
       {
-        on_hand_qty: parseFloat(task.Inventory.on_hand_qty) - qty_picked,
-        allocated_qty: parseFloat(task.Inventory.allocated_qty) - qty_picked,
+        on_hand_qty: parseFloat(task.inventory.on_hand_qty) - qty_picked,
+        allocated_qty: parseFloat(task.inventory.allocated_qty) - qty_picked,
       },
-      { transaction }
+      { transaction },
     );
 
     // 4. Create inventory transaction
     await InventoryTransaction.create(
       {
         transaction_id: `TXN-${Date.now()}`,
-        warehouse_id: task.PickWave.warehouse_id,
+        warehouse_id: task.wave.warehouse_id,
         sku_id: task.sku_id,
         transaction_type: "PICK",
         from_location_id: task.source_location_id,
@@ -482,16 +470,16 @@ export async function completePicking(req, res) {
         reference_id: task.id,
         performed_by: req.user?.id,
       },
-      { transaction }
+      { transaction },
     );
 
     // 5. Update order line
-    await task.SalesOrderLine.update(
+    await task.orderLine.update(
       {
-        picked_qty: parseFloat(task.SalesOrderLine.picked_qty) + qty_picked,
-        short_qty: parseFloat(task.SalesOrderLine.short_qty) + qtyShort,
+        picked_qty: parseFloat(task.orderLine.picked_qty) + qty_picked,
+        short_qty: parseFloat(task.orderLine.short_qty) + qtyShort,
       },
-      { transaction }
+      { transaction },
     );
 
     // 6. SHORT PICK HANDLING: Try reallocation
@@ -505,7 +493,7 @@ export async function completePicking(req, res) {
         task,
         qtyShort,
         transaction,
-        req.user?.id
+        req.user?.id,
       );
     }
 
@@ -526,31 +514,25 @@ export async function completePicking(req, res) {
       reallocation: reallocationResult,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error completing pick:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Attempt to reallocate short picked quantity
- * Creates new allocation and pick task if inventory available
- */
+// Attempt to reallocate short picked quantity
 async function attemptReallocation(task, shortQty, transaction, userId) {
-  // Find alternative inventory
   const alternativeInventory = await Inventory.findAll({
     where: {
-      warehouse_id: task.PickWave.warehouse_id,
+      warehouse_id: task.wave.warehouse_id,
       sku_id: task.sku_id,
       status: "HEALTHY",
       [Op.and]: [
         sequelize.literal(
-          "(on_hand_qty - allocated_qty - hold_qty - damaged_qty) > 0"
+          "(on_hand_qty - allocated_qty - hold_qty - damaged_qty) > 0",
         ),
       ],
-      // Exclude current inventory
-      id: { [Op.ne]: task.inventory_id },
-      // Exclude already allocated inventory for this order line
       id: {
         [Op.notIn]: sequelize.literal(`
           (SELECT inventory_id FROM stock_allocations
@@ -558,13 +540,12 @@ async function attemptReallocation(task, shortQty, transaction, userId) {
         `),
       },
     },
-    order: [["created_at", "ASC"]], // FIFO
+    order: [["created_at", "ASC"]],
     limit: 1,
     transaction,
   });
 
   if (alternativeInventory.length === 0) {
-    // No alternative inventory available
     return {
       reallocated: false,
       reason: "No alternative inventory available",
@@ -581,9 +562,8 @@ async function attemptReallocation(task, shortQty, transaction, userId) {
 
   const qtyToReallocate = Math.min(shortQty, availableQty);
 
-  // Create new allocation
   const allocationNo = await generateAllocationNo();
-  const allocation = await StockAllocation.create(
+  await StockAllocation.create(
     {
       allocation_no: allocationNo,
       order_id: task.order_id,
@@ -598,31 +578,28 @@ async function attemptReallocation(task, shortQty, transaction, userId) {
       batch_no: inventory.batch_no,
       serial_no: inventory.serial_no,
       expiry_date: inventory.expiry_date,
-      allocation_rule: task.SalesOrderLine.allocation_rule,
+      allocation_rule: task.orderLine.allocation_rule,
       status: "ACTIVE",
       allocated_at: new Date(),
     },
-    { transaction }
+    { transaction },
   );
 
-  // Update inventory
   await inventory.update(
     {
       allocated_qty: parseFloat(inventory.allocated_qty) + qtyToReallocate,
     },
-    { transaction }
+    { transaction },
   );
 
-  // Update order line allocation
-  await task.SalesOrderLine.update(
+  await task.orderLine.update(
     {
       allocated_qty:
-        parseFloat(task.SalesOrderLine.allocated_qty) + qtyToReallocate,
+        parseFloat(task.orderLine.allocated_qty) + qtyToReallocate,
     },
-    { transaction }
+    { transaction },
   );
 
-  // Create NEW pick task
   const taskNo = await generatePickTaskNo();
   const newTask = await PickTask.create(
     {
@@ -641,21 +618,20 @@ async function attemptReallocation(task, shortQty, transaction, userId) {
       serial_no: inventory.serial_no,
       expiry_date: inventory.expiry_date,
       status: "PENDING",
-      priority: 1, // High priority
-      pick_sequence: 9999, // Add to end
+      priority: 1,
+      pick_sequence: 9999,
       notes: `Re-allocated due to short pick from task ${task.task_no}`,
       created_by: userId,
     },
-    { transaction }
+    { transaction },
   );
 
-  // Update wave total tasks
   const wave = await PickWave.findByPk(task.wave_id, { transaction });
   await wave.update(
     {
       total_tasks: wave.total_tasks + 1,
     },
-    { transaction }
+    { transaction },
   );
 
   return {
@@ -663,26 +639,23 @@ async function attemptReallocation(task, shortQty, transaction, userId) {
     qty: qtyToReallocate,
     new_task_id: newTask.id,
     new_task_no: newTask.task_no,
-    location: inventory.Location?.location_code,
   };
 }
 
-/**
- * Update wave progress counters
- */
+// Update wave progress counters
 async function updateWaveProgress(waveId, transaction) {
   const wave = await PickWave.findByPk(waveId, {
-    include: [PickTask],
+    include: [{ model: PickTask, as: "tasks" }],
     transaction,
   });
 
-  const completedTasks = wave.PickTasks.filter(
-    (t) => t.status === "COMPLETED" || t.status === "SHORT_PICK"
+  const completedTasks = wave.tasks.filter(
+    (t) => t.status === "COMPLETED" || t.status === "SHORT_PICK",
   ).length;
 
-  const pickedUnits = wave.PickTasks.reduce(
+  const pickedUnits = wave.tasks.reduce(
     (sum, t) => sum + parseFloat(t.qty_picked || 0),
-    0
+    0,
   );
 
   await wave.update(
@@ -690,20 +663,18 @@ async function updateWaveProgress(waveId, transaction) {
       completed_tasks: completedTasks,
       picked_units: pickedUnits,
     },
-    { transaction }
+    { transaction },
   );
 
-  // Check if wave is complete
   if (completedTasks === wave.total_tasks) {
     await wave.update(
       {
         status: "COMPLETED",
         picking_completed_at: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
-    // Update all orders in wave to PICKED
     const waveOrders = await PickWaveOrder.findAll({
       where: { wave_id: waveId },
       transaction,
@@ -717,14 +688,12 @@ async function updateWaveProgress(waveId, transaction) {
       {
         where: { id: waveOrders.map((wo) => wo.order_id) },
         transaction,
-      }
+      },
     );
   }
 }
 
-/**
- * Update order pick totals
- */
+// Update order pick totals
 async function updateOrderPickTotals(orderId, transaction) {
   const lines = await SalesOrderLine.findAll({
     where: { order_id: orderId },
@@ -733,20 +702,18 @@ async function updateOrderPickTotals(orderId, transaction) {
 
   const totalPicked = lines.reduce(
     (sum, line) => sum + parseFloat(line.picked_qty || 0),
-    0
+    0,
   );
 
   await SalesOrder.update(
     { total_picked_units: totalPicked },
-    { where: { id: orderId }, transaction }
+    { where: { id: orderId }, transaction },
   );
 }
 
-/**
- * Get tasks for a wave
- * GET /api/pick-tasks/wave/:waveId
- */
-export async function getWaveTasks(req, res) {
+// Get tasks for a wave
+// GET /api/pick-tasks/wave/:waveId
+const getWaveTasks = async (req, res, next) => {
   try {
     const { waveId } = req.params;
 
@@ -755,19 +722,21 @@ export async function getWaveTasks(req, res) {
       include: [
         {
           model: SalesOrder,
+          as: "order",
           attributes: ["order_no", "customer_name"],
         },
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "orderLine",
+          include: [{ model: SKU, as: "sku" }],
         },
         {
           model: Location,
-          as: "SourceLocation",
+          as: "sourceLocation",
         },
         {
           model: User,
-          as: "AssignedUser",
+          as: "picker",
           attributes: ["id", "username", "first_name", "last_name"],
           required: false,
         },
@@ -777,10 +746,17 @@ export async function getWaveTasks(req, res) {
 
     res.json(tasks);
   } catch (error) {
-    console.error("Error fetching wave tasks:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-// Import PickWaveOrder at the top
-import PickWaveOrder from "../models/PickWaveOrder.js";
+export {
+  getAllTasks,
+  getMyTasks,
+  getTaskById,
+  assignTasks,
+  selfAssignTask,
+  startPicking,
+  completePicking,
+  getWaveTasks,
+};

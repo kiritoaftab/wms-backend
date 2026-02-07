@@ -4,20 +4,19 @@ import SalesOrder from "../models/SaleOrder.js";
 import SKU from "../models/SKU.js";
 import StockAllocation from "../models/StockAllocation.js";
 
-/**
- * Get all lines for an order
- * GET /api/sales-order-lines/order/:orderId
- */
-export async function getOrderLines(req, res) {
+// Get all lines for an order
+// GET /api/sales-order-lines/order/:orderId
+const getOrderLines = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
     const lines = await SalesOrderLine.findAll({
       where: { order_id: orderId },
       include: [
-        SKU,
+        { model: SKU, as: "sku" },
         {
           model: StockAllocation,
+          as: "allocations",
           where: { status: ["ACTIVE", "CONSUMED"] },
           required: false,
         },
@@ -27,25 +26,23 @@ export async function getOrderLines(req, res) {
 
     res.json(lines);
   } catch (error) {
-    console.error("Error fetching order lines:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get single order line
- * GET /api/sales-order-lines/:id
- */
-export async function getOrderLineById(req, res) {
+// Get single order line
+// GET /api/sales-order-lines/:id
+const getOrderLineById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const line = await SalesOrderLine.findByPk(id, {
       include: [
-        SKU,
-        SalesOrder,
+        { model: SKU, as: "sku" },
+        { model: SalesOrder, as: "order" },
         {
           model: StockAllocation,
+          as: "allocations",
           where: { status: ["ACTIVE", "CONSUMED"] },
           required: false,
         },
@@ -58,16 +55,13 @@ export async function getOrderLineById(req, res) {
 
     res.json(line);
   } catch (error) {
-    console.error("Error fetching order line:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Add new line to existing order
- * POST /api/sales-order-lines
- */
-export async function addOrderLine(req, res) {
+// Add new line to existing order
+// POST /api/sales-order-lines
+const addOrderLine = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -87,7 +81,6 @@ export async function addOrderLine(req, res) {
       notes,
     } = req.body;
 
-    // Verify order exists and is in DRAFT status
     const order = await SalesOrder.findByPk(order_id, { transaction });
     if (!order) {
       await transaction.rollback();
@@ -101,14 +94,12 @@ export async function addOrderLine(req, res) {
       });
     }
 
-    // Verify SKU exists
-    const sku = await SKU.findByPk(sku_id);
+    const sku = await SKU.findByPk(sku_id, { transaction });
     if (!sku) {
       await transaction.rollback();
       return res.status(404).json({ error: "SKU not found" });
     }
 
-    // Get next line number
     const lastLine = await SalesOrderLine.findOne({
       where: { order_id },
       order: [["line_no", "DESC"]],
@@ -117,7 +108,6 @@ export async function addOrderLine(req, res) {
 
     const lineNo = lastLine ? lastLine.line_no + 1 : 1;
 
-    // Create order line
     const line = await SalesOrderLine.create(
       {
         order_id,
@@ -139,24 +129,22 @@ export async function addOrderLine(req, res) {
         status: "PENDING",
         notes,
       },
-      { transaction }
+      { transaction },
     );
 
-    // Update order totals
     await order.update(
       {
         total_lines: order.total_lines + 1,
         total_ordered_units:
           parseFloat(order.total_ordered_units) + parseFloat(ordered_qty),
       },
-      { transaction }
+      { transaction },
     );
 
     await transaction.commit();
 
-    // Fetch complete line
     const completeLine = await SalesOrderLine.findByPk(line.id, {
-      include: [SKU],
+      include: [{ model: SKU, as: "sku" }],
     });
 
     res.status(201).json({
@@ -164,17 +152,16 @@ export async function addOrderLine(req, res) {
       line: completeLine,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error adding order line:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Update order line
- * PUT /api/sales-order-lines/:id
- */
-export async function updateOrderLine(req, res) {
+// Update order line
+// PUT /api/sales-order-lines/:id
+const updateOrderLine = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -182,7 +169,7 @@ export async function updateOrderLine(req, res) {
     const updateData = { ...req.body };
 
     const line = await SalesOrderLine.findByPk(id, {
-      include: [SalesOrder],
+      include: [{ model: SalesOrder, as: "order" }],
       transaction,
     });
 
@@ -191,28 +178,25 @@ export async function updateOrderLine(req, res) {
       return res.status(404).json({ error: "Order line not found" });
     }
 
-    // Can only update if order is DRAFT
-    if (line.SalesOrder.status !== "DRAFT") {
+    if (line.order.status !== "DRAFT") {
       await transaction.rollback();
       return res.status(400).json({
-        error: `Cannot update line for order with status: ${line.SalesOrder.status}`,
+        error: `Cannot update line for order with status: ${line.order.status}`,
       });
     }
 
-    // If quantity changed, update order totals
     if (updateData.ordered_qty && updateData.ordered_qty !== line.ordered_qty) {
       const qtyDiff =
         parseFloat(updateData.ordered_qty) - parseFloat(line.ordered_qty);
 
-      await line.SalesOrder.update(
+      await line.order.update(
         {
           total_ordered_units:
-            parseFloat(line.SalesOrder.total_ordered_units) + qtyDiff,
+            parseFloat(line.order.total_ordered_units) + qtyDiff,
         },
-        { transaction }
+        { transaction },
       );
 
-      // Recalculate line_total if unit_price exists
       if (line.unit_price) {
         updateData.line_total =
           parseFloat(updateData.ordered_qty) * parseFloat(line.unit_price);
@@ -223,9 +207,8 @@ export async function updateOrderLine(req, res) {
 
     await transaction.commit();
 
-    // Fetch updated line
     const updatedLine = await SalesOrderLine.findByPk(id, {
-      include: [SKU],
+      include: [{ model: SKU, as: "sku" }],
     });
 
     res.json({
@@ -233,24 +216,23 @@ export async function updateOrderLine(req, res) {
       line: updatedLine,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error updating order line:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Delete order line
- * DELETE /api/sales-order-lines/:id
- */
-export async function deleteOrderLine(req, res) {
+// Delete order line
+// DELETE /api/sales-order-lines/:id
+const deleteOrderLine = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
     const { id } = req.params;
 
     const line = await SalesOrderLine.findByPk(id, {
-      include: [SalesOrder],
+      include: [{ model: SalesOrder, as: "order" }],
       transaction,
     });
 
@@ -259,23 +241,21 @@ export async function deleteOrderLine(req, res) {
       return res.status(404).json({ error: "Order line not found" });
     }
 
-    // Can only delete if order is DRAFT
-    if (line.SalesOrder.status !== "DRAFT") {
+    if (line.order.status !== "DRAFT") {
       await transaction.rollback();
       return res.status(400).json({
-        error: `Cannot delete line for order with status: ${line.SalesOrder.status}`,
+        error: `Cannot delete line for order with status: ${line.order.status}`,
       });
     }
 
-    // Update order totals
-    await line.SalesOrder.update(
+    await line.order.update(
       {
-        total_lines: line.SalesOrder.total_lines - 1,
+        total_lines: line.order.total_lines - 1,
         total_ordered_units:
-          parseFloat(line.SalesOrder.total_ordered_units) -
+          parseFloat(line.order.total_ordered_units) -
           parseFloat(line.ordered_qty),
       },
-      { transaction }
+      { transaction },
     );
 
     await line.destroy({ transaction });
@@ -284,8 +264,17 @@ export async function deleteOrderLine(req, res) {
 
     res.json({ message: "Order line deleted successfully" });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error deleting order line:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
+
+export {
+  getOrderLines,
+  getOrderLineById,
+  addOrderLine,
+  updateOrderLine,
+  deleteOrderLine,
+};

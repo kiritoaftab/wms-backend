@@ -9,13 +9,14 @@ import StockAllocation from "../models/StockAllocation.js";
 import SKU from "../models/SKU.js";
 import Location from "../models/Location.js";
 import Warehouse from "../models/Warehouse.js";
-import { generateWaveNo, generatePickTaskNo } from "../utils/sequenceGenerator.js";
+import {
+  generateWaveNo,
+  generatePickTaskNo,
+} from "../utils/sequenceGenerator.js";
 
-/**
- * Get eligible orders for wave planning
- * GET /api/pick-waves/eligible-orders?warehouse_id=1
- */
-export async function getEligibleOrders(req, res) {
+// Get eligible orders for wave planning
+// GET /api/pick-waves/eligible-orders
+const getEligibleOrders = async (req, res, next) => {
   try {
     const { warehouse_id, priority, carrier } = req.query;
 
@@ -39,6 +40,7 @@ export async function getEligibleOrders(req, res) {
       include: [
         {
           model: PickWave,
+          as: "wave",
           where: {
             status: {
               [Op.in]: ["PENDING", "RELEASED", "IN_PROGRESS"],
@@ -61,7 +63,8 @@ export async function getEligibleOrders(req, res) {
       include: [
         {
           model: SalesOrderLine,
-          include: [SKU],
+          as: "lines",
+          include: [{ model: SKU, as: "sku" }],
         },
       ],
       order: [
@@ -73,22 +76,19 @@ export async function getEligibleOrders(req, res) {
 
     res.json(orders);
   } catch (error) {
-    console.error("Error fetching eligible orders:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Create new pick wave
- * POST /api/pick-waves
- */
-export async function createWave(req, res) {
+// Create new pick wave
+// POST /api/pick-waves
+const createWave = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
     const {
       warehouse_id,
-      order_ids, // Array of order IDs
+      order_ids,
       wave_type = "MANUAL",
       wave_strategy = "BATCH",
       priority = "NORMAL",
@@ -105,7 +105,6 @@ export async function createWave(req, res) {
       });
     }
 
-    // Verify orders exist and are eligible
     const orders = await SalesOrder.findAll({
       where: {
         id: order_ids,
@@ -114,7 +113,7 @@ export async function createWave(req, res) {
           [Op.in]: ["ALLOCATED", "PARTIAL_ALLOCATION"],
         },
       },
-      include: [SalesOrderLine],
+      include: [{ model: SalesOrderLine, as: "lines" }],
       transaction,
     });
 
@@ -125,21 +124,18 @@ export async function createWave(req, res) {
       });
     }
 
-    // Calculate wave totals
     const totals = orders.reduce(
       (acc, order) => ({
         total_orders: acc.total_orders + 1,
-        total_lines: acc.total_lines + order.SalesOrderLines.length,
+        total_lines: acc.total_lines + order.lines.length,
         total_units:
           acc.total_units + parseFloat(order.total_allocated_units || 0),
       }),
-      { total_orders: 0, total_lines: 0, total_units: 0 }
+      { total_orders: 0, total_lines: 0, total_units: 0 },
     );
 
-    // Generate wave number
     const waveNo = await generateWaveNo();
 
-    // Create wave
     const wave = await PickWave.create(
       {
         wave_no: waveNo,
@@ -155,10 +151,9 @@ export async function createWave(req, res) {
         notes,
         created_by: req.user?.id,
       },
-      { transaction }
+      { transaction },
     );
 
-    // Add orders to wave
     const waveOrders = order_ids.map((order_id) => ({
       wave_id: wave.id,
       order_id,
@@ -168,7 +163,6 @@ export async function createWave(req, res) {
 
     await transaction.commit();
 
-    // Fetch complete wave
     const completeWave = await PickWave.findByPk(wave.id, {
       include: [
         {
@@ -176,11 +170,12 @@ export async function createWave(req, res) {
           include: [
             {
               model: SalesOrder,
-              include: [SalesOrderLine],
+              as: "order",
+              include: [{ model: SalesOrderLine, as: "lines" }],
             },
           ],
         },
-        Warehouse,
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -189,17 +184,16 @@ export async function createWave(req, res) {
       wave: completeWave,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error creating wave:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Get all waves with filters
- * GET /api/pick-waves?warehouse_id=1&status=RELEASED
- */
-export async function getAllWaves(req, res) {
+// Get all waves with filters
+// GET /api/pick-waves
+const getAllWaves = async (req, res, next) => {
   try {
     const { warehouse_id, status, priority, page = 1, limit = 50 } = req.query;
 
@@ -215,9 +209,9 @@ export async function getAllWaves(req, res) {
       include: [
         {
           model: PickWaveOrder,
-          include: [SalesOrder],
+          include: [{ model: SalesOrder, as: "order" }],
         },
-        Warehouse,
+        { model: Warehouse, as: "warehouse" },
       ],
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
@@ -231,16 +225,13 @@ export async function getAllWaves(req, res) {
       waves: rows,
     });
   } catch (error) {
-    console.error("Error fetching waves:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Get wave by ID
- * GET /api/pick-waves/:id
- */
-export async function getWaveById(req, res) {
+// Get wave by ID
+// GET /api/pick-waves/:id
+const getWaveById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -251,10 +242,12 @@ export async function getWaveById(req, res) {
           include: [
             {
               model: SalesOrder,
+              as: "order",
               include: [
                 {
                   model: SalesOrderLine,
-                  include: [SKU],
+                  as: "lines",
+                  include: [{ model: SKU, as: "sku" }],
                 },
               ],
             },
@@ -262,15 +255,16 @@ export async function getWaveById(req, res) {
         },
         {
           model: PickTask,
+          as: "tasks",
           include: [
-            SKU,
+            { model: SKU, as: "sku" },
             {
               model: Location,
               as: "sourceLocation",
             },
           ],
         },
-        Warehouse,
+        { model: Warehouse, as: "warehouse" },
       ],
     });
 
@@ -280,16 +274,13 @@ export async function getWaveById(req, res) {
 
     res.json(wave);
   } catch (error) {
-    console.error("Error fetching wave:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
 
-/**
- * Release wave and generate pick tasks
- * POST /api/pick-waves/:id/release
- */
-export async function releaseWave(req, res) {
+// Release wave and generate pick tasks
+// POST /api/pick-waves/:id/release
+const releaseWave = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -302,17 +293,21 @@ export async function releaseWave(req, res) {
           include: [
             {
               model: SalesOrder,
+              as: "order",
               include: [
                 {
                   model: SalesOrderLine,
+                  as: "lines",
                   include: [
-                    SKU,
+                    { model: SKU, as: "sku" },
                     {
                       model: StockAllocation,
+                      as: "allocations",
                       where: { status: "ACTIVE" },
                       include: [
                         {
                           model: Location,
+                          as: "location",
                         },
                       ],
                     },
@@ -340,12 +335,11 @@ export async function releaseWave(req, res) {
 
     const pickTasks = [];
 
-    // Generate pick tasks for each allocation
     for (const waveOrder of wave.PickWaveOrders) {
-      const order = waveOrder.SalesOrder;
+      const order = waveOrder.order;
 
-      for (const line of order.SalesOrderLines) {
-        for (const allocation of line.StockAllocations) {
+      for (const line of order.lines) {
+        for (const allocation of line.allocations) {
           const taskNo = await generatePickTaskNo();
 
           const pickTask = await PickTask.create(
@@ -357,7 +351,7 @@ export async function releaseWave(req, res) {
               sku_id: line.sku_id,
               inventory_id: allocation.inventory_id,
               source_location_id: allocation.location_id,
-              staging_location_id: null, // Can be set later
+              staging_location_id: null,
               qty_to_pick: allocation.remaining_qty,
               qty_picked: 0,
               qty_short: 0,
@@ -369,12 +363,12 @@ export async function releaseWave(req, res) {
                 order.priority === "URGENT"
                   ? 1
                   : order.priority === "HIGH"
-                  ? 3
-                  : 5,
-              pick_sequence: 0, // Will be optimized next
+                    ? 3
+                    : 5,
+              pick_sequence: 0,
               created_by: req.user?.id,
             },
-            { transaction }
+            { transaction },
           );
 
           pickTasks.push(pickTask);
@@ -382,10 +376,8 @@ export async function releaseWave(req, res) {
       }
     }
 
-    // Optimize pick sequence
     await optimizePickSequence(wave.id, transaction);
 
-    // Update wave
     await wave.update(
       {
         status: "RELEASED",
@@ -393,10 +385,9 @@ export async function releaseWave(req, res) {
         released_at: new Date(),
         released_by: req.user?.id,
       },
-      { transaction }
+      { transaction },
     );
 
-    // Update orders status
     const orderIds = wave.PickWaveOrders.map((wo) => wo.order_id);
     await SalesOrder.update(
       {
@@ -406,7 +397,7 @@ export async function releaseWave(req, res) {
       {
         where: { id: orderIds },
         transaction,
-      }
+      },
     );
 
     await transaction.commit();
@@ -417,16 +408,14 @@ export async function releaseWave(req, res) {
       tasks_generated: pickTasks.length,
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error releasing wave:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Optimize pick sequence by location
- * Orders tasks by zone → aisle → rack → level for efficient picking
- */
+// Optimize pick sequence by location (zone → aisle → rack → level)
 async function optimizePickSequence(waveId, transaction) {
   const tasks = await PickTask.findAll({
     where: { wave_id: waveId },
@@ -446,17 +435,14 @@ async function optimizePickSequence(waveId, transaction) {
     transaction,
   });
 
-  // Update pick_sequence based on optimized order
   for (let i = 0; i < tasks.length; i++) {
     await tasks[i].update({ pick_sequence: i + 1 }, { transaction });
   }
 }
 
-/**
- * Cancel wave
- * POST /api/pick-waves/:id/cancel
- */
-export async function cancelWave(req, res) {
+// Cancel wave
+// POST /api/pick-waves/:id/cancel
+const cancelWave = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -477,7 +463,6 @@ export async function cancelWave(req, res) {
       });
     }
 
-    // Cancel all pick tasks
     await PickTask.update(
       {
         status: "CANCELLED",
@@ -487,20 +472,18 @@ export async function cancelWave(req, res) {
       {
         where: { wave_id: id },
         transaction,
-      }
+      },
     );
 
-    // Update wave
     await wave.update(
       {
         status: "CANCELLED",
         cancelled_at: new Date(),
         cancellation_reason,
       },
-      { transaction }
+      { transaction },
     );
 
-    // Restore order status to ALLOCATED
     const waveOrders = await PickWaveOrder.findAll({
       where: { wave_id: id },
       transaction,
@@ -516,24 +499,23 @@ export async function cancelWave(req, res) {
       {
         where: { id: orderIds },
         transaction,
-      }
+      },
     );
 
     await transaction.commit();
 
     res.json({ message: "Wave cancelled successfully" });
   } catch (error) {
-    await transaction.rollback();
-    console.error("Error cancelling wave:", error);
-    res.status(500).json({ error: error.message });
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    next(error);
   }
-}
+};
 
-/**
- * Get wave statistics
- * GET /api/pick-waves/stats?warehouse_id=1
- */
-export async function getWaveStats(req, res) {
+// Get wave statistics
+// GET /api/pick-waves/stats
+const getWaveStats = async (req, res, next) => {
   try {
     const { warehouse_id } = req.query;
 
@@ -557,7 +539,16 @@ export async function getWaveStats(req, res) {
 
     res.json(stats);
   } catch (error) {
-    console.error("Error fetching wave stats:", error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
-}
+};
+
+export {
+  getEligibleOrders,
+  createWave,
+  getAllWaves,
+  getWaveById,
+  releaseWave,
+  cancelWave,
+  getWaveStats,
+};
