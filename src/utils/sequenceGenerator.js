@@ -69,17 +69,22 @@ export async function generateWaveNo() {
  * Generate sequential Pick Task number
  * Format: PICK-00001
  */
-export async function generatePickTaskNo() {
-  const lastTask = await PickTask.findOne({
-    order: [["id", "DESC"]],
-    attributes: ["task_no"],
-  });
+export async function generatePickTaskNo(transaction) {
+  // Increment sequence atomically
+  await sequelize.query(
+    `
+    UPDATE allocation_sequences
+    SET current_value = LAST_INSERT_ID(current_value + 1)
+    WHERE name = 'PICK'
+    `,
+    { transaction },
+  );
 
-  if (!lastTask) {
-    return "PICK-00001";
-  }
+  // Fetch incremented value (connection-scoped)
+  const [[{ value }]] = await sequelize.query(
+    `SELECT LAST_INSERT_ID() AS value`,
+    { transaction },
+  );
 
-  const lastNumber = parseInt(lastTask.task_no.split("-")[1]);
-  const nextNumber = lastNumber + 1;
-  return `PICK-${String(nextNumber).padStart(5, "0")}`;
+  return `PICK-${String(value).padStart(5, "0")}`;
 }

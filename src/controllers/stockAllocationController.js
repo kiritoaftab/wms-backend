@@ -153,6 +153,7 @@ const manualAllocate = async (req, res, next) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    // TODO : check if we need a REALLOCATE status for orders that were previously allocated but had changes
     if (!["CONFIRMED", "PARTIAL_ALLOCATION"].includes(order.status)) {
       await transaction.rollback();
       return res.status(400).json({

@@ -166,14 +166,9 @@ const createWave = async (req, res, next) => {
     const completeWave = await PickWave.findByPk(wave.id, {
       include: [
         {
-          model: PickWaveOrder,
-          include: [
-            {
-              model: SalesOrder,
-              as: "order",
-              include: [{ model: SalesOrderLine, as: "lines" }],
-            },
-          ],
+          model: SalesOrder,
+          as: "orders",
+          include: [{ model: SalesOrderLine, as: "lines" }],
         },
         { model: Warehouse, as: "warehouse" },
       ],
@@ -208,8 +203,9 @@ const getAllWaves = async (req, res, next) => {
       where,
       include: [
         {
-          model: PickWaveOrder,
-          include: [{ model: SalesOrder, as: "order" }],
+          model: SalesOrder,
+          as: "orders",
+          include: [{ model: SalesOrderLine, as: "lines" }],
         },
         { model: Warehouse, as: "warehouse" },
       ],
@@ -238,20 +234,9 @@ const getWaveById = async (req, res, next) => {
     const wave = await PickWave.findByPk(id, {
       include: [
         {
-          model: PickWaveOrder,
-          include: [
-            {
-              model: SalesOrder,
-              as: "order",
-              include: [
-                {
-                  model: SalesOrderLine,
-                  as: "lines",
-                  include: [{ model: SKU, as: "sku" }],
-                },
-              ],
-            },
-          ],
+          model: SalesOrder,
+          as: "orders",
+          include: [{ model: SalesOrderLine, as: "lines" }],
         },
         {
           model: PickTask,
@@ -289,27 +274,22 @@ const releaseWave = async (req, res, next) => {
     const wave = await PickWave.findByPk(id, {
       include: [
         {
-          model: PickWaveOrder,
+          model: SalesOrder,
+          as: "orders",
           include: [
             {
-              model: SalesOrder,
-              as: "order",
+              model: SalesOrderLine,
+              as: "lines",
               include: [
+                { model: SKU, as: "sku" },
                 {
-                  model: SalesOrderLine,
-                  as: "lines",
+                  model: StockAllocation,
+                  as: "allocations",
+                  where: { status: "ACTIVE" },
                   include: [
-                    { model: SKU, as: "sku" },
                     {
-                      model: StockAllocation,
-                      as: "allocations",
-                      where: { status: "ACTIVE" },
-                      include: [
-                        {
-                          model: Location,
-                          as: "location",
-                        },
-                      ],
+                      model: Location,
+                      as: "location",
                     },
                   ],
                 },
@@ -335,9 +315,7 @@ const releaseWave = async (req, res, next) => {
 
     const pickTasks = [];
 
-    for (const waveOrder of wave.PickWaveOrders) {
-      const order = waveOrder.order;
-
+    for (const order of wave.orders) {
       for (const line of order.lines) {
         for (const allocation of line.allocations) {
           const taskNo = await generatePickTaskNo();
@@ -388,7 +366,7 @@ const releaseWave = async (req, res, next) => {
       { transaction },
     );
 
-    const orderIds = wave.PickWaveOrders.map((wo) => wo.order_id);
+    const orderIds = wave.orders.map((order) => order.id);
     await SalesOrder.update(
       {
         status: "PICKING",

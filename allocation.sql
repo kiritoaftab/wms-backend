@@ -5,3 +5,6 @@ CREATE TABLE allocation_sequences (
 
 INSERT INTO allocation_sequences (name, current_value)
 VALUES ('ALLOC', 0);
+
+INSERT INTO allocation_sequences (name, current_value)
+VALUES ('PICK', 0);

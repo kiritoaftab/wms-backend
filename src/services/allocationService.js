@@ -27,6 +27,7 @@ export async function allocateOrder(orderId, transaction) {
     throw new Error("Order not found");
   }
 
+  // TODO : check if we need a REALLOCATE status for orders that were previously allocated but had changes
   if (!["CONFIRMED", "PARTIAL_ALLOCATION"].includes(order.status)) {
     throw new Error(
       `Cannot allocate order with status: ${order.status}. Order must be CONFIRMED.`,
