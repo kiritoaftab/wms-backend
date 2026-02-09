@@ -724,6 +724,9 @@ export const groupInventoryBySKU = async (req, res, next) => {
     if (warehouse_id) where.warehouse_id = warehouse_id;
     if (client_id) where.client_id = client_id;
 
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
     const inventory = await Inventory.findAll({
       where,
       attributes: [
@@ -739,6 +742,10 @@ export const groupInventoryBySKU = async (req, res, next) => {
           "total_allocated",
         ],
         [sequelize.fn("SUM", sequelize.col("damaged_qty")), "total_damaged"],
+        [
+          sequelize.fn("MIN", sequelize.col("expiry_date")),
+          "nearest_expiry",
+        ],
       ],
       include: [
         {
@@ -750,9 +757,34 @@ export const groupInventoryBySKU = async (req, res, next) => {
       group: ["sku_id"],
     });
 
+    const data = inventory.map((item) => {
+      const row = item.toJSON();
+      const totalOnHand = parseFloat(row.total_on_hand) || 0;
+      const totalHold = parseFloat(row.total_hold) || 0;
+      const totalAvailable = parseFloat(row.total_available) || 0;
+
+      let status;
+      if (totalOnHand === 0) {
+        status = "Out of Stock";
+      } else if (totalHold > 0) {
+        status = "QC Hold";
+      } else if (
+        row.nearest_expiry &&
+        new Date(row.nearest_expiry) <= thirtyDaysFromNow
+      ) {
+        status = "Expiry Risk";
+      } else if (totalAvailable < 10) {
+        status = "Low Stock";
+      } else {
+        status = "Healthy";
+      }
+
+      return { ...row, status };
+    });
+
     res.json({
       success: true,
-      data: inventory,
+      data,
     });
   } catch (error) {
     next(error);
@@ -779,6 +811,10 @@ export const groupInventoryByZone = async (req, res, next) => {
           "total_allocated",
         ],
         [sequelize.fn("SUM", sequelize.col("damaged_qty")), "total_damaged"],
+        [
+          sequelize.fn("COUNT", sequelize.literal("DISTINCT sku_id")),
+          "sku_count",
+        ],
       ],
 
       include: [
