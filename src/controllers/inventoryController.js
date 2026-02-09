@@ -602,7 +602,7 @@ export const transferStock = async (req, res, next) => {
         warehouse_id,
         sku_id,
         location_id: to_location_id,
-        batch_no: batch_no || null,
+        // batch_no: batch_no || null,
       },
       transaction: t,
     });
