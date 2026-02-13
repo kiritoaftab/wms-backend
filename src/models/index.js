@@ -26,6 +26,10 @@ import PickWave from "./PIckWave.js";
 import PickWaveOrder from "./PickWaveOrder.js";
 import PickTask from "./PickTask.js";
 import StockAllocation from "./StockAllocation.js";
+import Carrier from "./Carrier.js";
+import Carton from "./Carton.js";
+import CartonItem from "./CartonItem.js";
+import Shipment from "./Shipment.js";
 
 // Define Associations
 
@@ -479,6 +483,33 @@ User.hasMany(StockAllocation, {
   as: "createdAllocations",
 });
 
+Carrier.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+Carrier.belongsTo(User, { as: "updater", foreignKey: "updated_by" });
+
+// --- Carton ---
+Carton.belongsTo(SalesOrder, { foreignKey: "sales_order_id" });
+Carton.belongsTo(Warehouse, { foreignKey: "warehouse_id" });
+Carton.belongsTo(User, { as: "packer", foreignKey: "packed_by" });
+Carton.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+Carton.hasMany(CartonItem, { foreignKey: "carton_id", as: "items" });
+
+SalesOrder.hasMany(Carton, { foreignKey: "sales_order_id", as: "cartons" });
+
+// --- CartonItem ---
+CartonItem.belongsTo(Carton, { foreignKey: "carton_id" });
+CartonItem.belongsTo(SalesOrderLine, { foreignKey: "sales_order_line_id" });
+CartonItem.belongsTo(SKU, { foreignKey: "sku_id" });
+
+// --- Shipment ---
+Shipment.belongsTo(SalesOrder, { foreignKey: "sales_order_id" });
+Shipment.belongsTo(Warehouse, { foreignKey: "warehouse_id" });
+Shipment.belongsTo(Carrier, { foreignKey: "carrier_id" });
+Shipment.belongsTo(User, { as: "dispatcher", foreignKey: "dispatched_by" });
+Shipment.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+
+SalesOrder.hasOne(Shipment, { foreignKey: "sales_order_id", as: "shipment" });
+Carrier.hasMany(Shipment, { foreignKey: "carrier_id", as: "shipments" });
+
 // Sync function
 const syncDatabase = async (options = {}) => {
   try {
@@ -519,5 +550,9 @@ export {
   PickWaveOrder,
   PickTask,
   StockAllocation,
+  Carrier,
+  Carton,
+  CartonItem,
+  Shipment,
   syncDatabase,
 };
