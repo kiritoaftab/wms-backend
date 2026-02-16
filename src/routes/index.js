@@ -28,6 +28,7 @@ import pickWaveRoutes from "./pickWaveRoutes.js";
 import pickTaskRoutes from "./pickTaskRoutes.js";
 import carrierRoutes from "./carrierRoutes.js";
 import packingRoutes from "./packingRoutes.js";
+import shippingRoutes from "./shippingRoutes.js";
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.use("/pick-waves", pickWaveRoutes);
 router.use("/pick-tasks", pickTaskRoutes);
 router.use("/carriers", carrierRoutes);
 router.use("/packing", packingRoutes);
+router.use("/shipping", shippingRoutes);
 
 // Health check
 router.get("/health", (req, res) => {
