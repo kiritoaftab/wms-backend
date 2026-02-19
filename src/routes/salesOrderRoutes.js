@@ -7,6 +7,7 @@ import {
   confirmOrder,
   cancelOrder,
   getOrderStats,
+  getOutboundSummary,
 } from "../controllers/salesOrderController.js";
 import { authenticate } from "../middleware/auth.js";
 
@@ -17,6 +18,7 @@ router.use(authenticate);
 
 // Statistics
 router.get("/stats", getOrderStats);
+router.get("/outbound-summary", getOutboundSummary);
 
 // CRUD operations
 router.post("/", createOrder);

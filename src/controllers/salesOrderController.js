@@ -520,6 +520,65 @@ const getOrderStats = async (req, res, next) => {
   }
 };
 
+// GET /api/sales-orders/outbound-summary
+const getOutboundSummary = async (req, res, next) => {
+  try {
+    const { warehouse_id, client_id } = req.query;
+
+    const baseWhere = {};
+    if (warehouse_id) baseWhere.warehouse_id = warehouse_id;
+    if (client_id) baseWhere.client_id = client_id;
+
+    // Start of today (UTC)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [ordersPending, pickingPending, packedReady, shippedToday] =
+      await Promise.all([
+        // Orders Pending: confirmed but not yet in picking
+        SalesOrder.count({
+          where: {
+            ...baseWhere,
+            status: {
+              [Op.in]: ["CONFIRMED", "ALLOCATED", "PARTIAL_ALLOCATION"],
+            },
+          },
+        }),
+        // Picking Pending: allocated or actively being picked
+        SalesOrder.count({
+          where: {
+            ...baseWhere,
+            status: { [Op.in]: ["ALLOCATED", "PARTIAL_ALLOCATION", "PICKING"] },
+          },
+        }),
+        // Packed Ready: packed and awaiting shipment
+        SalesOrder.count({
+          where: { ...baseWhere, status: "PACKED" },
+        }),
+        // Shipped Today
+        SalesOrder.count({
+          where: {
+            ...baseWhere,
+            status: { [Op.in]: ["SHIPPED", "DELIVERED"] },
+            shipped_at: { [Op.gte]: todayStart },
+          },
+        }),
+      ]);
+
+    res.json({
+      success: true,
+      data: {
+        orders_pending: ordersPending,
+        picking_pending: pickingPending,
+        packed_ready: packedReady,
+        shipped_today: shippedToday,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   createOrder,
   getAllOrders,
@@ -528,4 +587,5 @@ export {
   confirmOrder,
   cancelOrder,
   getOrderStats,
+  getOutboundSummary,
 };
