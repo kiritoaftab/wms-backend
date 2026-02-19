@@ -4,6 +4,7 @@ import {
   createCarton,
   addItemToCarton,
   removeItemFromCarton,
+  deleteCarton,
   closeCarton,
   finalizePacking,
   getOrderCartons,
@@ -36,6 +37,13 @@ router.delete(
   "/:orderId/cartons/:cartonId/items/:itemId",
   authorize("ORDERS", "DELETE"),
   removeItemFromCarton,
+);
+
+// Delete carton
+router.delete(
+  "/:orderId/cartons/:cartonId",
+  authorize("ORDERS", "DELETE"),
+  deleteCarton,
 );
 
 // Close carton

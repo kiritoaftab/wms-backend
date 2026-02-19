@@ -483,6 +483,94 @@ const finalizePacking = async (req, res, next) => {
   }
 };
 
+// DELETE /api/packing/:orderId/cartons/:cartonId
+// Delete a carton; if it has items, revert packed quantities first
+const deleteCarton = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { orderId, cartonId } = req.params;
+
+    const order = await SalesOrder.findByPk(orderId, { transaction });
+    if (!order || order.status !== "PACKING") {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: order
+          ? `Order must be in PACKING status. Current: ${order.status}`
+          : "Sales order not found",
+      });
+    }
+
+    const carton = await Carton.findOne({
+      where: { id: cartonId, sales_order_id: orderId },
+      include: [{ model: CartonItem, as: "items" }],
+      transaction,
+    });
+
+    if (!carton) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, message: "Carton not found for this order" });
+    }
+
+    if (carton.status !== "OPEN") {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: `Carton is ${carton.status}. Only OPEN cartons can be deleted`,
+      });
+    }
+
+    // Revert packed quantities for each item in the carton
+    if (carton.items && carton.items.length > 0) {
+      // Aggregate qty per order line to minimise DB updates
+      const qtyByLine = {};
+      let totalRevertQty = 0;
+
+      for (const item of carton.items) {
+        const lineId = item.sales_order_line_id;
+        qtyByLine[lineId] = (qtyByLine[lineId] || 0) + item.qty;
+        totalRevertQty += item.qty;
+      }
+
+      // Revert packed_qty on each affected order line
+      for (const [lineId, revertQty] of Object.entries(qtyByLine)) {
+        const orderLine = await SalesOrderLine.findByPk(lineId, { transaction });
+        if (orderLine) {
+          await orderLine.update(
+            { packed_qty: Math.max(0, Number(orderLine.packed_qty) - revertQty) },
+            { transaction },
+          );
+        }
+      }
+
+      // Revert total_packed_units on the order
+      await order.update(
+        { total_packed_units: Math.max(0, Number(order.total_packed_units) - totalRevertQty) },
+        { transaction },
+      );
+
+      // Delete all carton items
+      await CartonItem.destroy({
+        where: { carton_id: carton.id },
+        transaction,
+      });
+    }
+
+    // Delete the carton
+    await carton.destroy({ transaction });
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: "Carton deleted",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
 // GET /api/packing/:orderId/cartons
 // Fetch all cartons for the order with their items
 const getOrderCartons = async (req, res, next) => {
@@ -525,6 +613,7 @@ export {
   createCarton,
   addItemToCarton,
   removeItemFromCarton,
+  deleteCarton,
   closeCarton,
   finalizePacking,
   getOrderCartons,
