@@ -167,6 +167,7 @@ const createASN = async (req, res, next) => {
       driver_phone,
       special_handling,
       notes,
+      attachments,
       lines, // Array of line items
     } = req.body;
 
@@ -195,6 +196,7 @@ const createASN = async (req, res, next) => {
         driver_phone,
         special_handling,
         notes,
+        attachments,
         total_lines,
         total_expected_units,
         status: "DRAFT",
@@ -277,6 +279,7 @@ const updateASN = async (req, res, next) => {
       driver_phone,
       special_handling,
       notes,
+      attachments,
     } = req.body;
 
     await asn.update({
@@ -292,6 +295,7 @@ const updateASN = async (req, res, next) => {
       driver_phone,
       special_handling,
       notes,
+      attachments,
       updated_by: req.user.id,
     });
 
