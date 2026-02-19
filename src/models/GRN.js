@@ -62,6 +62,13 @@ const GRN = sequelize.define(
       },
     },
 
+    // Attachments (S3 links)
+    attachments: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      comment: 'Array of S3 URLs: ["https://s3.../file1.pdf", ...]',
+    },
+
     notes: {
       type: DataTypes.TEXT,
       allowNull: true,

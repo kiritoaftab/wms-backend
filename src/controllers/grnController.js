@@ -151,7 +151,7 @@ const postGRNFromASN = async (req, res, next) => {
   const t = await sequelize.transaction();
 
   try {
-    const { asn_id } = req.body;
+    const { asn_id, attachments } = req.body;
 
     // Get ASN with lines, pallets, and dock
     const asn = await ASN.findByPk(asn_id, {
@@ -238,6 +238,7 @@ const postGRNFromASN = async (req, res, next) => {
         status: "POSTED",
         posted_at: new Date(),
         posted_by: req.user.id,
+        attachments,
       },
       { transaction: t },
     );
