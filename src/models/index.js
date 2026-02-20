@@ -30,6 +30,10 @@ import Carrier from "./Carrier.js";
 import Carton from "./Carton.js";
 import CartonItem from "./CartonItem.js";
 import Shipment from "./Shipment.js";
+import RateCard from "./RateCard.js";
+import BillableEvent from "./BillableEvent.js";
+import Invoice from "./Invoice.js";
+import Payment from "./Payment.js";
 
 // Define Associations
 
@@ -510,6 +514,41 @@ Shipment.belongsTo(User, { as: "creator", foreignKey: "created_by" });
 SalesOrder.hasOne(Shipment, { foreignKey: "sales_order_id", as: "shipment" });
 Carrier.hasMany(Shipment, { foreignKey: "carrier_id", as: "shipments" });
 
+// --- RateCard ---
+RateCard.belongsTo(Client, { foreignKey: "client_id" });
+RateCard.belongsTo(Warehouse, { foreignKey: "warehouse_id" });
+RateCard.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+RateCard.belongsTo(User, { as: "updater", foreignKey: "updated_by" });
+
+Client.hasMany(RateCard, { foreignKey: "client_id", as: "rateCards" });
+
+// --- BillableEvent ---
+BillableEvent.belongsTo(Warehouse, { foreignKey: "warehouse_id" });
+BillableEvent.belongsTo(Client, { foreignKey: "client_id" });
+BillableEvent.belongsTo(RateCard, { foreignKey: "rate_card_id" });
+BillableEvent.belongsTo(Invoice, { foreignKey: "invoice_id" });
+BillableEvent.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+
+Client.hasMany(BillableEvent, {
+  foreignKey: "client_id",
+  as: "billableEvents",
+});
+
+// --- Invoice ---
+Invoice.belongsTo(Warehouse, { foreignKey: "warehouse_id" });
+Invoice.belongsTo(Client, { foreignKey: "client_id" });
+Invoice.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+Invoice.hasMany(BillableEvent, { foreignKey: "invoice_id", as: "lineItems" });
+Invoice.hasMany(Payment, { foreignKey: "invoice_id", as: "payments" });
+
+Client.hasMany(Invoice, { foreignKey: "client_id", as: "invoices" });
+
+// --- Payment ---
+Payment.belongsTo(Invoice, { foreignKey: "invoice_id" });
+Payment.belongsTo(Client, { foreignKey: "client_id" });
+Payment.belongsTo(User, { as: "recorder", foreignKey: "recorded_by" });
+Payment.belongsTo(User, { as: "confirmer", foreignKey: "confirmed_by" });
+
 // Sync function
 const syncDatabase = async (options = {}) => {
   try {
@@ -554,5 +593,9 @@ export {
   Carton,
   CartonItem,
   Shipment,
+  RateCard,
+  BillableEvent,
+  Invoice,
+  Payment,
   syncDatabase,
 };

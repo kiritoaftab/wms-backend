@@ -30,6 +30,9 @@ import carrierRoutes from "./carrierRoutes.js";
 import packingRoutes from "./packingRoutes.js";
 import shippingRoutes from "./shippingRoutes.js";
 
+// Billing routes
+import rateCardRoutes from "./rateCardRoutes.js";
+
 const router = express.Router();
 
 // API routes
@@ -62,6 +65,9 @@ router.use("/pick-tasks", pickTaskRoutes);
 router.use("/carriers", carrierRoutes);
 router.use("/packing", packingRoutes);
 router.use("/shipping", shippingRoutes);
+
+// Billing operations
+router.use("/rate-cards", rateCardRoutes);
 
 // Health check
 router.get("/health", (req, res) => {
