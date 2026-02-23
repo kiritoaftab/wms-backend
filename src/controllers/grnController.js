@@ -17,6 +17,7 @@ import {
 import { sequelize } from "../config/database.js";
 import { Op } from "sequelize";
 import { getReceivingLocation } from "../utils/locationHelper.js";
+import { createBillableEvent } from "../utils/billingHelpers.js";
 
 const generatePTTaskID = async (startingNumber) => {
   return `PT-${String(startingNumber).padStart(5, "0")}`;
@@ -286,6 +287,18 @@ const postGRNFromASN = async (req, res, next) => {
 
     await t.commit();
 
+    await createBillableEvent({
+      warehouse_id: asn.warehouse_id,
+      client_id: asn.client_id,
+      charge_type: "INBOUND_HANDLING",
+      reference_type: "GRN",
+      reference_id: grn.id,
+      reference_no: grn.grn_no,
+      qty: asn.total_received_units,
+      event_date: new Date(),
+      created_by: req.user.id,
+    });
+
     // Fetch created GRN with details including locations
     const createdGRN = await GRN.findByPk(grn.id, {
       include: [
@@ -550,6 +563,17 @@ const completePutawayTask = async (req, res, next) => {
           },
           { transaction: t },
         );
+        await createBillableEvent({
+          warehouse_id: asn.warehouse_id,
+          client_id: asn.client_id,
+          charge_type: "PUTAWAY",
+          reference_type: "GRN",
+          reference_id: grnLine.grn?.id,
+          reference_no: grnLine.grn?.grn_no,
+          qty: asn.total_received_units,
+          event_date: new Date(),
+          created_by: req.user.id,
+        });
       }
     }
 

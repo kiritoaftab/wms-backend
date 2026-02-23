@@ -9,6 +9,7 @@ import {
   Carrier,
   Warehouse,
 } from "../models/index.js";
+import { createBillableEvent } from "../utils/billingHelpers.js";
 
 /**
  * Generate sequential Shipment number
@@ -41,7 +42,9 @@ const createShipment = async (req, res, next) => {
 
     if (!order) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Sales order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Sales order not found" });
     }
 
     if (order.status !== "PACKED") {
@@ -107,7 +110,10 @@ const createShipment = async (req, res, next) => {
         total_cartons: totalCartons,
         total_weight: totalWeight || null,
         ship_to_name: order.ship_to_name,
-        ship_to_address: [order.ship_to_address_line1, order.ship_to_address_line2]
+        ship_to_address: [
+          order.ship_to_address_line1,
+          order.ship_to_address_line2,
+        ]
           .filter(Boolean)
           .join(", "),
         ship_to_city: order.ship_to_city,
@@ -147,7 +153,9 @@ const dispatchShipment = async (req, res, next) => {
 
     if (!shipment) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Shipment not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Shipment not found" });
     }
 
     if (shipment.status !== "CREATED") {
@@ -199,6 +207,19 @@ const dispatchShipment = async (req, res, next) => {
         { transaction },
       );
 
+      await createBillableEvent({
+        warehouse_id: order.warehouse_id,
+        client_id: order.client_id,
+        charge_type: "SHIPPING_ADMIN",
+        reference_type: "SALES_ORDER",
+        reference_id: order.id,
+        reference_no: order.order_no,
+        qty: order.total_packed_units,
+        event_date: new Date(),
+        created_by: req.user?.id || null,
+        transaction,
+      });
+
       // Mark cartons as SHIPPED
       await Carton.update(
         { status: "SHIPPED" },
@@ -238,7 +259,10 @@ const getShipments = async (req, res, next) => {
     const { count, rows } = await Shipment.findAndCountAll({
       where,
       include: [
-        { model: SalesOrder, attributes: ["id", "order_no", "customer_name", "status"] },
+        {
+          model: SalesOrder,
+          attributes: ["id", "order_no", "customer_name", "status"],
+        },
         { model: Warehouse, attributes: ["id", "warehouse_name"] },
         { model: Carrier, attributes: ["id", "carrier_name", "carrier_code"] },
       ],
@@ -272,7 +296,14 @@ const getShipmentById = async (req, res, next) => {
       include: [
         {
           model: SalesOrder,
-          attributes: ["id", "order_no", "customer_name", "status", "order_type", "priority"],
+          attributes: [
+            "id",
+            "order_no",
+            "customer_name",
+            "status",
+            "order_type",
+            "priority",
+          ],
           include: [
             {
               model: Carton,
@@ -287,7 +318,9 @@ const getShipmentById = async (req, res, next) => {
     });
 
     if (!shipment) {
-      return res.status(404).json({ success: false, message: "Shipment not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Shipment not found" });
     }
 
     res.json({
@@ -299,9 +332,4 @@ const getShipmentById = async (req, res, next) => {
   }
 };
 
-export {
-  createShipment,
-  dispatchShipment,
-  getShipments,
-  getShipmentById,
-};
+export { createShipment, dispatchShipment, getShipments, getShipmentById };

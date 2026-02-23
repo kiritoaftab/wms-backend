@@ -32,6 +32,8 @@ import shippingRoutes from "./shippingRoutes.js";
 
 // Billing routes
 import rateCardRoutes from "./rateCardRoutes.js";
+import billableEventRoutes from "./billableEventRoutes.js";
+import billingRoutes from "./billingRoutes.js";
 
 const router = express.Router();
 
@@ -68,6 +70,8 @@ router.use("/shipping", shippingRoutes);
 
 // Billing operations
 router.use("/rate-cards", rateCardRoutes);
+router.use("/billable-events", billableEventRoutes);
+router.use("/billing", billingRoutes);
 
 // Health check
 router.get("/health", (req, res) => {

@@ -7,6 +7,7 @@ import {
   CartonItem,
   SKU,
 } from "../models/index.js";
+import { createBillableEvent } from "../utils/billingHelpers.js";
 
 /**
  * Generate sequential Carton number
@@ -38,7 +39,9 @@ const startPacking = async (req, res, next) => {
 
     if (!order) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Sales order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Sales order not found" });
     }
 
     if (order.status !== "PICKED") {
@@ -82,7 +85,9 @@ const createCarton = async (req, res, next) => {
 
     if (!order) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Sales order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Sales order not found" });
     }
 
     if (order.status !== "PACKING") {
@@ -133,7 +138,14 @@ const addItemToCarton = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const { orderId, cartonId } = req.params;
-    const { sales_order_line_id, sku_id, qty, batch_no, serial_no, expiry_date } = req.body;
+    const {
+      sales_order_line_id,
+      sku_id,
+      qty,
+      batch_no,
+      serial_no,
+      expiry_date,
+    } = req.body;
 
     if (!sales_order_line_id || !sku_id || !qty || qty <= 0) {
       await transaction.rollback();
@@ -149,7 +161,9 @@ const addItemToCarton = async (req, res, next) => {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: order ? `Order must be in PACKING status. Current: ${order.status}` : "Sales order not found",
+        message: order
+          ? `Order must be in PACKING status. Current: ${order.status}`
+          : "Sales order not found",
       });
     }
 
@@ -161,7 +175,9 @@ const addItemToCarton = async (req, res, next) => {
 
     if (!carton) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Carton not found for this order" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Carton not found for this order" });
     }
 
     if (carton.status !== "OPEN") {
@@ -180,21 +196,27 @@ const addItemToCarton = async (req, res, next) => {
 
     if (!orderLine) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Sales order line not found for this order" });
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "Sales order line not found for this order",
+        });
     }
 
     // Validate packed qty does not exceed picked qty
-    const alreadyPacked = await CartonItem.sum("qty", {
-      where: { sales_order_line_id },
-      include: [
-        {
-          model: Carton,
-          where: { sales_order_id: orderId },
-          attributes: [],
-        },
-      ],
-      transaction,
-    }) || 0;
+    const alreadyPacked =
+      (await CartonItem.sum("qty", {
+        where: { sales_order_line_id },
+        include: [
+          {
+            model: Carton,
+            where: { sales_order_id: orderId },
+            attributes: [],
+          },
+        ],
+        transaction,
+      })) || 0;
 
     if (alreadyPacked + qty > Number(orderLine.picked_qty)) {
       await transaction.rollback();
@@ -264,7 +286,9 @@ const removeItemFromCarton = async (req, res, next) => {
 
     if (!carton) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Carton not found for this order" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Carton not found for this order" });
     }
 
     if (carton.status !== "OPEN") {
@@ -282,13 +306,18 @@ const removeItemFromCarton = async (req, res, next) => {
 
     if (!cartonItem) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Carton item not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Carton item not found" });
     }
 
     const removedQty = cartonItem.qty;
 
     // Reverse packed_qty on order line
-    const orderLine = await SalesOrderLine.findByPk(cartonItem.sales_order_line_id, { transaction });
+    const orderLine = await SalesOrderLine.findByPk(
+      cartonItem.sales_order_line_id,
+      { transaction },
+    );
     if (orderLine) {
       await orderLine.update(
         { packed_qty: Math.max(0, Number(orderLine.packed_qty) - removedQty) },
@@ -300,7 +329,12 @@ const removeItemFromCarton = async (req, res, next) => {
     const order = await SalesOrder.findByPk(orderId, { transaction });
     if (order) {
       await order.update(
-        { total_packed_units: Math.max(0, Number(order.total_packed_units) - removedQty) },
+        {
+          total_packed_units: Math.max(
+            0,
+            Number(order.total_packed_units) - removedQty,
+          ),
+        },
         { transaction },
       );
     }
@@ -340,7 +374,9 @@ const closeCarton = async (req, res, next) => {
 
     if (!carton) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Carton not found for this order" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Carton not found for this order" });
     }
 
     if (carton.status !== "OPEN") {
@@ -400,7 +436,9 @@ const finalizePacking = async (req, res, next) => {
 
     if (!order) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Sales order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Sales order not found" });
     }
 
     if (order.status !== "PACKING") {
@@ -425,7 +463,8 @@ const finalizePacking = async (req, res, next) => {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: "No cartons found. Create and pack at least one carton before finalizing.",
+        message:
+          "No cartons found. Create and pack at least one carton before finalizing.",
       });
     }
 
@@ -470,6 +509,19 @@ const finalizePacking = async (req, res, next) => {
       { transaction },
     );
 
+    await createBillableEvent({
+      warehouse_id: order.warehouse_id,
+      client_id: order.client_id,
+      charge_type: "PACKING",
+      reference_type: "SALES_ORDER",
+      reference_id: order.id,
+      reference_no: order.order_no,
+      qty: order.total_packed_units,
+      event_date: new Date(),
+      created_by: req.user?.id || null,
+      transaction,
+    });
+
     await transaction.commit();
 
     res.json({
@@ -509,7 +561,9 @@ const deleteCarton = async (req, res, next) => {
 
     if (!carton) {
       await transaction.rollback();
-      return res.status(404).json({ success: false, message: "Carton not found for this order" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Carton not found for this order" });
     }
 
     if (carton.status !== "OPEN") {
@@ -534,10 +588,14 @@ const deleteCarton = async (req, res, next) => {
 
       // Revert packed_qty on each affected order line
       for (const [lineId, revertQty] of Object.entries(qtyByLine)) {
-        const orderLine = await SalesOrderLine.findByPk(lineId, { transaction });
+        const orderLine = await SalesOrderLine.findByPk(lineId, {
+          transaction,
+        });
         if (orderLine) {
           await orderLine.update(
-            { packed_qty: Math.max(0, Number(orderLine.packed_qty) - revertQty) },
+            {
+              packed_qty: Math.max(0, Number(orderLine.packed_qty) - revertQty),
+            },
             { transaction },
           );
         }
@@ -545,7 +603,12 @@ const deleteCarton = async (req, res, next) => {
 
       // Revert total_packed_units on the order
       await order.update(
-        { total_packed_units: Math.max(0, Number(order.total_packed_units) - totalRevertQty) },
+        {
+          total_packed_units: Math.max(
+            0,
+            Number(order.total_packed_units) - totalRevertQty,
+          ),
+        },
         { transaction },
       );
 
@@ -578,7 +641,9 @@ const getOrderCartons = async (req, res, next) => {
     const order = await SalesOrder.findByPk(req.params.orderId);
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Sales order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Sales order not found" });
     }
 
     const cartons = await Carton.findAll({

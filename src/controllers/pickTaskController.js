@@ -15,6 +15,7 @@ import {
   generatePickTaskNo,
   generateAllocationNo,
 } from "../utils/sequenceGenerator.js";
+import { createBillableEventsForWave } from "../utils/billingHelpers.js";
 
 // Get all pick tasks with filters
 // GET /api/pick-tasks
@@ -594,8 +595,7 @@ async function attemptReallocation(task, shortQty, transaction, userId) {
 
   await task.orderLine.update(
     {
-      allocated_qty:
-        parseFloat(task.orderLine.allocated_qty) + qtyToReallocate,
+      allocated_qty: parseFloat(task.orderLine.allocated_qty) + qtyToReallocate,
     },
     { transaction },
   );
@@ -680,16 +680,25 @@ async function updateWaveProgress(waveId, transaction) {
       transaction,
     });
 
+    const orderIds = waveOrders.map((wo) => wo.order_id);
+
     await SalesOrder.update(
       {
         status: "PICKED",
         picking_completed_at: new Date(),
       },
       {
-        where: { id: waveOrders.map((wo) => wo.order_id) },
+        where: { id: orderIds },
         transaction,
       },
     );
+
+    const pickedOrders = await SalesOrder.findAll({
+      where: { id: orderIds },
+      transaction,
+    });
+
+    await createBillableEventsForWave(pickedOrders, transaction);
   }
 }
 
