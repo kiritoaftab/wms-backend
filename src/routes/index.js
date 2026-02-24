@@ -36,6 +36,7 @@ import billableEventRoutes from "./billableEventRoutes.js";
 import billingRoutes from "./billingRoutes.js";
 import invoiceRoutes from "./invoiceRoutes.js";
 import paymentRoutes from "./paymentRoutes.js";
+import searchRoutes from "./searchRoutes.js";
 
 const router = express.Router();
 
@@ -76,6 +77,7 @@ router.use("/billable-events", billableEventRoutes);
 router.use("/billing", billingRoutes);
 router.use("/invoices", invoiceRoutes);
 router.use("/payments", paymentRoutes);
+router.use("/search", searchRoutes);
 
 // Health check
 router.get("/health", (req, res) => {
