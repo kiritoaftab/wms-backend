@@ -32,7 +32,11 @@ const resolveInvoiceStatus = (invoice, newPaidAmount) => {
   }
   // No payments remaining — restore SENT or OVERDUE depending on due_date
   const isOverdue = invoice.due_date < today;
-  return { newStatus: isOverdue ? "OVERDUE" : "SENT", newBalance, newPaidAt: null };
+  return {
+    newStatus: isOverdue ? "OVERDUE" : "SENT",
+    newBalance,
+    newPaidAt: null,
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -52,8 +56,15 @@ const listPayments = async (req, res, next) => {
       where,
       include: [
         { model: Client, attributes: ["id", "client_name", "client_code"] },
-        { model: Invoice, attributes: ["id", "invoice_no", "total_amount", "status"] },
-        { model: User, as: "recorder", attributes: ["id", "name"] },
+        {
+          model: Invoice,
+          attributes: ["id", "invoice_no", "total_amount", "status"],
+        },
+        {
+          model: User,
+          as: "recorder",
+          attributes: ["id", "first_name", "last_name", "username"],
+        },
       ],
       order: [["id", "DESC"]],
       limit: parseInt(limit, 10),
@@ -63,7 +74,7 @@ const listPayments = async (req, res, next) => {
     res.json({
       success: true,
       data: rows,
-      meta: {
+      pagination: {
         total: count,
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
@@ -91,7 +102,9 @@ const getAgingReport = async (req, res, next) => {
 
     const invoices = await Invoice.findAll({
       where,
-      include: [{ model: Client, attributes: ["id", "client_name", "client_code"] }],
+      include: [
+        { model: Client, attributes: ["id", "client_name", "client_code"] },
+      ],
       order: [["due_date", "ASC"]],
     });
 
@@ -176,9 +189,16 @@ const getPayment = async (req, res, next) => {
         {
           model: Invoice,
           attributes: [
-            "id", "invoice_no", "period_start", "period_end",
-            "subtotal", "tax_amount", "total_amount",
-            "paid_amount", "balance_due", "status",
+            "id",
+            "invoice_no",
+            "period_start",
+            "period_end",
+            "subtotal",
+            "tax_amount",
+            "total_amount",
+            "paid_amount",
+            "balance_due",
+            "status",
           ],
         },
         { model: User, as: "recorder", attributes: ["id", "name"] },
@@ -187,7 +207,9 @@ const getPayment = async (req, res, next) => {
     });
 
     if (!payment) {
-      return res.status(404).json({ success: false, message: "Payment not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Payment not found" });
     }
 
     res.json({ success: true, data: payment });
@@ -218,7 +240,8 @@ const recordPayment = async (req, res, next) => {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        message: "invoice_id, amount, payment_date, and payment_method are required",
+        message:
+          "invoice_id, amount, payment_date, and payment_method are required",
       });
     }
 
@@ -230,7 +253,9 @@ const recordPayment = async (req, res, next) => {
 
     if (!invoice) {
       await t.rollback();
-      return res.status(404).json({ success: false, message: "Invoice not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Invoice not found" });
     }
 
     if (invoice.status === "VOID" || invoice.status === "CANCELLED") {
@@ -278,10 +303,15 @@ const recordPayment = async (req, res, next) => {
     );
 
     // 4. Update invoice paid_amount
-    const newPaidAmount = parseFloat((currentPaid + effectiveAmount).toFixed(2));
+    const newPaidAmount = parseFloat(
+      (currentPaid + effectiveAmount).toFixed(2),
+    );
 
     // 5 & 6. Recalculate balance_due and status
-    const { newStatus, newBalance, newPaidAt } = resolveInvoiceStatus(invoice, newPaidAmount);
+    const { newStatus, newBalance, newPaidAt } = resolveInvoiceStatus(
+      invoice,
+      newPaidAmount,
+    );
 
     await invoice.update(
       {
@@ -308,7 +338,14 @@ const recordPayment = async (req, res, next) => {
         { model: Client, attributes: ["id", "client_name", "client_code"] },
         {
           model: Invoice,
-          attributes: ["id", "invoice_no", "total_amount", "paid_amount", "balance_due", "status"],
+          attributes: [
+            "id",
+            "invoice_no",
+            "total_amount",
+            "paid_amount",
+            "balance_due",
+            "status",
+          ],
         },
       ],
     });
@@ -326,7 +363,9 @@ const confirmPayment = async (req, res, next) => {
     const payment = await Payment.findByPk(req.params.id);
 
     if (!payment) {
-      return res.status(404).json({ success: false, message: "Payment not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Payment not found" });
     }
 
     if (payment.status !== "RECORDED") {
@@ -362,12 +401,16 @@ const reversePayment = async (req, res, next) => {
 
     if (!payment) {
       await t.rollback();
-      return res.status(404).json({ success: false, message: "Payment not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Payment not found" });
     }
 
     if (payment.status === "REVERSED") {
       await t.rollback();
-      return res.status(400).json({ success: false, message: "Payment is already reversed" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Payment is already reversed" });
     }
 
     const invoice = await Invoice.findByPk(payment.invoice_id, {
@@ -377,16 +420,22 @@ const reversePayment = async (req, res, next) => {
 
     if (!invoice) {
       await t.rollback();
-      return res.status(404).json({ success: false, message: "Associated invoice not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Associated invoice not found" });
     }
 
     // Subtract this payment's contribution (amount + tds) from invoice
-    const effectiveAmount = parseFloat(payment.amount) + parseFloat(payment.tds_amount || 0);
+    const effectiveAmount =
+      parseFloat(payment.amount) + parseFloat(payment.tds_amount || 0);
     const newPaidAmount = parseFloat(
       Math.max(0, parseFloat(invoice.paid_amount) - effectiveAmount).toFixed(2),
     );
 
-    const { newStatus, newBalance, newPaidAt } = resolveInvoiceStatus(invoice, newPaidAmount);
+    const { newStatus, newBalance, newPaidAt } = resolveInvoiceStatus(
+      invoice,
+      newPaidAmount,
+    );
 
     await invoice.update(
       {
@@ -399,7 +448,10 @@ const reversePayment = async (req, res, next) => {
       { transaction: t },
     );
 
-    await payment.update({ status: "REVERSED", updated_by: req.user.id }, { transaction: t });
+    await payment.update(
+      { status: "REVERSED", updated_by: req.user.id },
+      { transaction: t },
+    );
 
     await t.commit();
 
