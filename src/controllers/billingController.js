@@ -410,12 +410,27 @@ const getReadyToInvoice = async (req, res, next) => {
     });
     const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.toJSON()]));
 
+    // Fetch all READY events for the matched client/warehouse combinations
+    const events = await BillableEvent.findAll({
+      where: whereClause,
+      order: [["event_date", "ASC"]],
+    });
+
+    // Group events by client_id + warehouse_id key
+    const eventMap = {};
+    for (const event of events) {
+      const key = `${event.client_id}_${event.warehouse_id}`;
+      if (!eventMap[key]) eventMap[key] = [];
+      eventMap[key].push(event);
+    }
+
     const result = rows.map((r) => ({
       client_id: r.client_id,
       warehouse_id: r.warehouse_id,
       client: clientMap[r.client_id] ?? null,
       ready_amount: parseFloat(r.total_amount) || 0,
       event_count: parseInt(r.event_count) || 0,
+      events: eventMap[`${r.client_id}_${r.warehouse_id}`] ?? [],
     }));
 
     res.json({ success: true, data: result });
