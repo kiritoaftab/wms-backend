@@ -17,6 +17,7 @@ import {
 // 1. STATIC NAVIGATION ITEMS (no DB query)
 //    Add any page/action you want searchable
 // ─────────────────────────────────────────────
+
 const NAV_ITEMS = [
   { display: "Dashboard", subtitle: "Overview & metrics", route: "/dashboard" },
   {
@@ -27,7 +28,7 @@ const NAV_ITEMS = [
   {
     display: "Create ASN",
     subtitle: "Start new inbound shipment",
-    route: "/inbound/asns/new",
+    route: "/inbound/createASN/new",
   },
   {
     display: "Receive GRN",
@@ -47,7 +48,7 @@ const NAV_ITEMS = [
   {
     display: "Inventory Holds",
     subtitle: "QC holds & quarantine",
-    route: "/inventory/holds",
+    route: "/inventory",
   },
   {
     display: "Outbound Orders",
@@ -57,7 +58,7 @@ const NAV_ITEMS = [
   {
     display: "Create Sales Order",
     subtitle: "Start new outbound order",
-    route: "/outbound/orders/new",
+    route: "/outbound/saleOrderCreate/new",
   },
   {
     display: "Picking",
@@ -67,7 +68,7 @@ const NAV_ITEMS = [
   {
     display: "Start Picking Wave",
     subtitle: "Launch a new pick wave",
-    route: "/picking/waves/new",
+    route: "/picking/createPickWavePage",
   },
   {
     display: "Packing",
@@ -82,29 +83,139 @@ const NAV_ITEMS = [
   {
     display: "Clients",
     subtitle: "Client master data",
-    route: "/master/clients",
+    route: "/masters?tab=clients",
   },
   {
     display: "Suppliers",
     subtitle: "Supplier master data",
-    route: "/master/suppliers",
+    route: "/masters?tab=suppliers",
   },
-  { display: "SKUs", subtitle: "Product catalog", route: "/master/skus" },
+  { display: "SKUs", subtitle: "Product catalog", route: "/masters?tab=skus" },
   {
     display: "Locations",
     subtitle: "Warehouse bin locations",
-    route: "/master/locations",
+    route: "/masters?tab=locations-bins",
   },
   {
     display: "Generate Invoice",
     subtitle: "Billing & GST invoices",
-    route: "/billing/invoice",
+    route: "/billing?tab=invoiced",
   },
   { display: "Reports", subtitle: "Analytics & exports", route: "/reports" },
   {
     display: "User Management",
     subtitle: "Users, roles & permissions",
-    route: "/settings/users",
+    route: "/masters?tab=users",
+  },
+  {
+    display: "Warehouses",
+    subtitle: "Warehouse master configuration",
+    route: "/masters?tab=warehouses",
+  },
+  {
+    display: "Docks",
+    subtitle: "Dock master & gate setup",
+    route: "/masters?tab=docks",
+  },
+  {
+    display: "Carriers",
+    subtitle: "Carrier & transport partners",
+    route: "/masters?tab=carriers",
+  },
+  {
+    display: "Slotting Rules",
+    subtitle: "Putaway & storage logic",
+    route: "/masters?tab=slotting-rules",
+  },
+  {
+    display: "Roles",
+    subtitle: "Role definitions & mapping",
+    route: "/masters?tab=roles",
+  },
+  {
+    display: "Permissions",
+    subtitle: "Access control policies",
+    route: "/masters?tab=permissions",
+  },
+  {
+    display: "Modules",
+    subtitle: "System module configuration",
+    route: "/masters?tab=modules",
+  },
+  {
+    display: "Packing - Ready",
+    subtitle: "Orders ready for packing",
+    route: "/packing?tab=ready",
+  },
+  {
+    display: "Packing - In Progress",
+    subtitle: "Currently packing orders",
+    route: "/packing?tab=progress",
+  },
+  {
+    display: "Packing - Completed",
+    subtitle: "Packed orders history",
+    route: "/packing?tab=completed",
+  },
+  {
+    display: "Picking Waves",
+    subtitle: "Manage picking waves",
+    route: "/picking?tab=waves",
+  },
+  {
+    display: "Picking Tasks",
+    subtitle: "Active pick tasks",
+    route: "/picking?tab=tasks",
+  },
+  {
+    display: "Picking Exceptions",
+    subtitle: "Short picks & issues",
+    route: "/picking?tab=exceptions",
+  },
+  {
+    display: "Billable Events",
+    subtitle: "All billable activities",
+    route: "/billing?tab=billableEvents",
+  },
+  {
+    display: "Ready to Invoice",
+    subtitle: "Events ready for invoicing",
+    route: "/billing?tab=readyToInvoice",
+  },
+  {
+    display: "Invoiced",
+    subtitle: "Generated invoices",
+    route: "/billing?tab=invoiced",
+  },
+  {
+    display: "Payments Aging",
+    subtitle: "Outstanding payments report",
+    route: "/billing?tab=paymentsAging",
+  },
+  {
+    display: "Rate Cards",
+    subtitle: "Client pricing configuration",
+    route: "/billing?tab=rateCards",
+  },
+  {
+    display: "Shipping - Ready to Ship",
+    subtitle: "Packed orders pending dispatch",
+    route: "/shipping?tab=readyToShip",
+  },
+  {
+    display: "Shipping - In Transit",
+    subtitle: "Track carrier shipments",
+    route: "/shipping?tab=inTransit",
+  },
+  {
+    display: "Shipping - Delivered",
+    subtitle: "Delivered shipments & POD",
+    route: "/shipping?tab=delivered",
+  },
+  {
+    display: "Shipping - Exceptions",
+    subtitle: "Delays, damage, RTO issues",
+    route: "/shipping?tab=exceptions",
   },
 ];
 
