@@ -498,11 +498,11 @@ const completePicking = async (req, res, next) => {
       );
     }
 
-    // 7. Update wave progress
-    await updateWaveProgress(task.wave_id, transaction);
-
-    // 8. Update order totals
+    // 7. Update order totals first so total_picked_units is correct before billing events are created
     await updateOrderPickTotals(task.order_id, transaction);
+
+    // 8. Update wave progress (triggers billing events when wave completes, reads total_picked_units)
+    await updateWaveProgress(task.wave_id, transaction);
 
     await transaction.commit();
 
