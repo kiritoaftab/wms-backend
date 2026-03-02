@@ -37,6 +37,7 @@ import billingRoutes from "./billingRoutes.js";
 import invoiceRoutes from "./invoiceRoutes.js";
 import paymentRoutes from "./paymentRoutes.js";
 import searchRoutes from "./searchRoutes.js";
+import reportRoutes from "./reportRoutes.js";
 
 const router = express.Router();
 
@@ -78,6 +79,7 @@ router.use("/billing", billingRoutes);
 router.use("/invoices", invoiceRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/search", searchRoutes);
+router.use("/reports", reportRoutes);
 
 // Health check
 router.get("/health", (req, res) => {
