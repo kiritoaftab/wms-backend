@@ -289,7 +289,7 @@ const SEARCH_REGISTRY = [
     displayField: "client_name",
     subtitleField: "client_code",
     extraAttributes: ["client_code", "email"],
-    route: "/master?tab=clients",
+    route: "/masters?tab=clients",
     no_deeplink: true,
   },
   {
@@ -301,7 +301,7 @@ const SEARCH_REGISTRY = [
     displayField: "supplier_name",
     subtitleField: "supplier_code",
     extraAttributes: ["supplier_code", "email"],
-    route: "/master/suppliers",
+    route: "/masters?tab=suppliers",
   },
   {
     key: "locations",
@@ -312,7 +312,7 @@ const SEARCH_REGISTRY = [
     displayField: "location_code",
     subtitleField: "zone",
     extraAttributes: ["zone", "location_type", "current_usage", "capacity"],
-    route: "/master/locations",
+    route: "/masters?tab=locations-bins",
   },
   {
     key: "orders",
@@ -323,7 +323,7 @@ const SEARCH_REGISTRY = [
     displayField: "order_no",
     subtitleField: "status",
     extraAttributes: ["customer_name", "status"],
-    route: "/outbound/sales-orders",
+    route: "/orderDetails",
   },
 ];
 
