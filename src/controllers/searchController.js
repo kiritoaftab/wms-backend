@@ -11,6 +11,7 @@ import {
   Location,
   InventoryTransaction,
   SalesOrder,
+  PickTask,
 } from "../models/index.js";
 
 // ─────────────────────────────────────────────
@@ -327,6 +328,17 @@ const SEARCH_REGISTRY = [
     extraAttributes: ["customer_name", "status"],
     route: "/orderDetails",
   },
+  {
+    key: "picking",
+    label: "Pick Task",
+    model: PickTask,
+    idField: "task_no",
+    searchFields: ["task_no"],
+    displayField: "task_no",
+    subtitleField: "status",
+    extraAttributes: ["status", "wave_id", "order_id"],
+    route: "/picking/tasks",
+  },
 ];
 
 // ─────────────────────────────────────────────
@@ -342,6 +354,7 @@ const PREFIX_MAP = {
   PT: ["putaway_tasks"], // Putaway Task IDs live in grn_lines
   SO: ["orders"], // Sales Orders (add to registry when built)
   PW: ["waves"], // Pick Waves (add to registry when built)
+  PICK: ["picking"], // Pick Task IDs e.g. PICK-00001
   PL: ["pick_lists"],
   SHP: ["shipments"],
   INV: ["invoices"],
