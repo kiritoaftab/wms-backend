@@ -268,7 +268,7 @@ const SEARCH_REGISTRY = [
     displayField: "sku_name",
     subtitleField: "sku_code",
     extraAttributes: ["sku_code", "category", "uom"],
-    route: "/master/skus",
+    route: "inventory/sku/",
   },
   {
     key: "pallets",
@@ -279,7 +279,8 @@ const SEARCH_REGISTRY = [
     displayField: "pallet_id",
     subtitleField: "status",
     extraAttributes: ["status", "pallet_type"],
-    route: "/inbound/pallets",
+    no_deeplink: true,
+    route: "/masters?tab=pallets",
   },
   {
     key: "clients",
@@ -326,7 +327,7 @@ const SEARCH_REGISTRY = [
     displayField: "order_no",
     subtitleField: "status",
     extraAttributes: ["customer_name", "status"],
-    route: "/orderDetails",
+    route: "/outbound/orderDetails/",
   },
   {
     key: "picking",
